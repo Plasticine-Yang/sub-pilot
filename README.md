@@ -6,6 +6,19 @@
 
 产品愿景见 `SubtitleFlow_PRD.md`；术语见 `CONTEXT.md`；架构决策见 `docs/adr/`。
 
+## 下载与安装
+
+从 [GitHub Releases](https://github.com/Plasticine-Yang/sub-pilot/releases) 下载对应平台的安装包（macOS `.dmg`、Windows `.msi`/`.exe`、Linux `.AppImage`/`.deb`）。
+
+> **当前为未签名构建**，首次启动会被系统安全机制拦截，需手动放行：
+>
+> - **macOS**：提示「已损坏」或「无法验证开发者」时，在「系统设置 → 隐私与安全性」点「仍要打开」，或终端执行 `xattr -dr com.apple.quarantine /Applications/SubtitleFlow.app`。
+> - **Windows**：SmartScreen 弹「Windows 已保护你的电脑」时，点「更多信息 → 仍要运行」。
+>
+> 代码签名与公证正在跟进（见 `.scratch/release-cicd/issues/03-code-signing-and-notarization.md`）。
+
+> **已知限制**：当前发布产物尚未内置 Whisper 运行时（Python + PyTorch，见 ADR-0005 延后打包），**转写功能暂不可用**；导入、界面与导出路径可正常使用。随包运行时跟进见 `.scratch/release-cicd/issues/01-bundle-whisper-runtime.md`。
+
 ## 技术栈
 
 - 前端：Tauri v2 + React + TypeScript + TailwindCSS + shadcn/ui
@@ -20,7 +33,7 @@
 npm install
 
 # 2. 拉取随包资源（ffmpeg 静态二进制 + Whisper base.pt 模型 + whisper 运行时）
-#    大文件不入库，由脚本按校验和下载到 resources/ 下；并在
+#    大文件不入库，由脚本按 host 平台与校验和下载到 resources/ 下；并在
 #    resources/whisper/venv 里装好 openai-whisper（需本机有 python3）
 ./scripts/setup-resources.sh
 
@@ -37,3 +50,20 @@ npm run typecheck   # tsc --noEmit
 npm run lint        # eslint
 cargo test          # 后端单测（在 src-tauri/ 下运行）
 ```
+
+## CI / 发布
+
+- **CI**（`.github/workflows/ci.yml`）：每次 push / PR 到 `main` 触发，跑前端 `typecheck` + `lint` 与后端 `cargo test`。
+- **发布**（`.github/workflows/release.yml`）：push 一个 `v*` 版本 tag 触发，在 macOS（Apple Silicon + Intel）、Windows、Linux 上分别构建安装包，并创建一个 **草稿（draft）** GitHub Release。
+
+发布一版：
+
+```bash
+# 确认 main 已绿（CI 通过），版本号与 package.json / tauri.conf.json / Cargo.toml 一致
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+workflow 跑完后，到 GitHub Releases 页面检查产物与发布说明，确认无误再手动 **Publish** 草稿。
+
+> 产物目前**未签名**、且**未内置 Whisper 运行时**（转写不可用）。三项后续工作（whisper 随包、Windows/Linux 资源适配、代码签名/公证）见 `.scratch/release-cicd/issues/`。

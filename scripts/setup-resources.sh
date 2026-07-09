@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # Downloads the bundled external dependencies SubtitleFlow needs to run:
-#   - ffmpeg  : static macOS/Apple-Silicon binary  -> resources/ffmpeg/ffmpeg
+#   - ffmpeg  : static binary for the host platform -> resources/ffmpeg/ffmpeg[.exe]
 #   - base model : OpenAI Whisper "base" PyTorch model -> resources/models/base.pt
 #   - CJK font : Noto Sans CJK SC for burn-in         -> resources/fonts/NotoSansCJKsc-Regular.otf
 #   - whisper : OpenAI whisper CLI in a venv          -> resources/whisper/venv
@@ -13,6 +13,14 @@
 # first-launch self-check succeed.
 #
 # Idempotent: files with a matching SHA-256 are left untouched.
+#
+# Environment toggles (used by CI):
+#   SKIP_WHISPER_VENV=1  skip provisioning the ~900MB whisper venv. The bundle
+#                        resources (ffmpeg/model/font) are all `tauri build`
+#                        needs to compile; the venv is only for real dev-time
+#                        transcription, which CI does not exercise.
+#   FFMPEG_PLATFORM=...   override host detection: darwin-arm64 | darwin-x64 |
+#                        linux-x64 | win32-x64.
 
 set -euo pipefail
 
@@ -24,10 +32,58 @@ MODELS_DIR="${REPO_ROOT}/resources/models"
 FONTS_DIR="${REPO_ROOT}/resources/fonts"
 WHISPER_DIR="${REPO_ROOT}/resources/whisper"
 
+# --- Detect host platform for the ffmpeg asset ------------------------------
+# ffmpeg-static publishes one static binary per platform in a single release.
+detect_platform() {
+  if [[ -n "${FFMPEG_PLATFORM:-}" ]]; then
+    echo "${FFMPEG_PLATFORM}"
+    return
+  fi
+  local os arch
+  os="$(uname -s)"
+  arch="$(uname -m)"
+  case "${os}" in
+    Darwin) case "${arch}" in
+        arm64) echo "darwin-arm64" ;;
+        x86_64) echo "darwin-x64" ;;
+        *) echo "unsupported-darwin-${arch}" ;;
+      esac ;;
+    Linux) echo "linux-x64" ;;
+    MINGW* | MSYS* | CYGWIN* | Windows_NT) echo "win32-x64" ;;
+    *) echo "unsupported-${os}-${arch}" ;;
+  esac
+}
+
+PLATFORM="$(detect_platform)"
+
 # --- Pinned artifacts (URL + expected SHA-256) -----------------------------
-# ffmpeg 6.0 static arm64 from eugeneware/ffmpeg-static (release b6.1.1).
-FFMPEG_URL="https://github.com/eugeneware/ffmpeg-static/releases/download/b6.1.1/ffmpeg-darwin-arm64"
-FFMPEG_SHA256="a90e3db6a3fd35f6074b013f948b1aa45b31c6375489d39e572bea3f18336584"
+# ffmpeg 6.0 static binaries from eugeneware/ffmpeg-static (release b6.1.1),
+# one per platform. All four SHAs are pinned; the host's is selected below.
+#
+# The binary is always written to `resources/ffmpeg/ffmpeg` (no extension) on
+# every platform, because tauri.conf.json bundles that single path and
+# `tauri-build` fails to compile if it is missing. On Windows this file is a PE
+# executable under a non-.exe name — enough to build and package; wiring the
+# Rust backend to spawn it correctly on Windows is part of the deferred
+# win/linux resource-adaptation ticket.
+FFMPEG_RELEASE="https://github.com/eugeneware/ffmpeg-static/releases/download/b6.1.1"
+case "${PLATFORM}" in
+  darwin-arm64)
+    FFMPEG_URL="${FFMPEG_RELEASE}/ffmpeg-darwin-arm64"
+    FFMPEG_SHA256="a90e3db6a3fd35f6074b013f948b1aa45b31c6375489d39e572bea3f18336584" ;;
+  darwin-x64)
+    FFMPEG_URL="${FFMPEG_RELEASE}/ffmpeg-darwin-x64"
+    FFMPEG_SHA256="ebdddc936f61e14049a2d4b549a412b8a40deeff6540e58a9f2a2da9e6b18894" ;;
+  linux-x64)
+    FFMPEG_URL="${FFMPEG_RELEASE}/ffmpeg-linux-x64"
+    FFMPEG_SHA256="e7e7fb30477f717e6f55f9180a70386c62677ef8a4d4d1a5d948f4098aa3eb99" ;;
+  win32-x64)
+    FFMPEG_URL="${FFMPEG_RELEASE}/ffmpeg-win32-x64"
+    FFMPEG_SHA256="04e1307997530f9cf2fe35cba2ca7e8875ca91da02f89d6c7243df819c94ad00" ;;
+  *)
+    echo "✗ unsupported platform '${PLATFORM}'. Set FFMPEG_PLATFORM to one of: darwin-arm64, darwin-x64, linux-x64, win32-x64." >&2
+    exit 1 ;;
+esac
 FFMPEG_OUT="${FFMPEG_DIR}/ffmpeg"
 
 # OpenAI Whisper "base" PyTorch model (official checksum embedded in URL path).
@@ -85,7 +141,16 @@ fetch() {
 # The Rust backend spawns resources/whisper/whisper (a tracked launcher) which
 # forwards to a whisper CLI. Provision it in a co-located venv so dev runs
 # transcribe for real. Idempotent: an existing working CLI is left untouched.
+#
+# CI skips this: `tauri build` only needs the bundle resources above to compile,
+# and the produced artifact does not yet ship a whisper runtime anyway (that
+# packaging is deferred — see the release ticket). Provisioning ~900MB of
+# PyTorch on every CI run would be pure waste.
 provision_whisper() {
+  if [[ "${SKIP_WHISPER_VENV:-0}" == "1" ]]; then
+    echo "• SKIP_WHISPER_VENV=1 — skipping whisper venv provisioning"
+    return 0
+  fi
   local venv="${WHISPER_DIR}/venv"
   if [[ -x "${venv}/bin/whisper" ]]; then
     echo "✓ whisper venv already present"
@@ -103,10 +168,12 @@ provision_whisper() {
 }
 
 # --- Run --------------------------------------------------------------------
-echo "SubtitleFlow — fetching bundled resources into resources/"
+echo "SubtitleFlow — fetching bundled resources into resources/ (platform: ${PLATFORM})"
 fetch "${FFMPEG_URL}" "${FFMPEG_OUT}" "${FFMPEG_SHA256}" "755"
 fetch "${MODEL_URL}"  "${MODEL_OUT}"  "${MODEL_SHA256}"  "644"
 fetch "${FONT_URL}"   "${FONT_OUT}"   "${FONT_SHA256}"   "644"
-chmod 755 "${WHISPER_DIR}/whisper"
+# The launcher shim is a bash script (dev-only, POSIX shells); chmod is a no-op
+# on Windows checkouts but harmless.
+chmod 755 "${WHISPER_DIR}/whisper" 2>/dev/null || true
 provision_whisper
 echo "Done. Resources are ready under resources/."

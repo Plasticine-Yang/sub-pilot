@@ -1,0 +1,103 @@
+name: Release
+
+# Publish desktop bundles for macOS, Linux and Windows when a version tag is
+# pushed. Create the tag from a green `main`, e.g.:
+#   git tag v0.1.0 && git push origin v0.1.0
+#
+# The release is created as a DRAFT: review the artifacts and notes, then
+# publish it manually from the GitHub Releases page.
+#
+# NOTE: bundles are currently UNSIGNED. macOS Gatekeeper and Windows SmartScreen
+# will warn on first launch; see README "下载与安装" for the workaround. Signing +
+# notarization is tracked as a separate ticket.
+#
+# KNOWN LIMITATION: the shipped app cannot transcribe yet — the Whisper runtime
+# (Python + PyTorch) is not bundled (ADR-0005 deferred it). Import/UI/export
+# paths work; transcription needs the deferred whisper-packaging ticket.
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  release:
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: macos-latest # Apple Silicon (M1+)
+            args: "--target aarch64-apple-darwin"
+            ffmpeg_platform: darwin-arm64
+          - platform: macos-latest # Intel
+            args: "--target x86_64-apple-darwin"
+            ffmpeg_platform: darwin-x64
+          - platform: ubuntu-22.04
+            args: ""
+            ffmpeg_platform: linux-x64
+          - platform: windows-latest
+            args: ""
+            ffmpeg_platform: win32-x64
+
+    runs-on: ${{ matrix.platform }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          # macOS legs cross-build both arches; only add targets there.
+          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Install Tauri system dependencies (Linux only)
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            patchelf \
+            xdg-utils \
+            libgtk-3-dev
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      # `tauri-build` validates the bundle resource paths (ffmpeg/model/font) at
+      # compile time, so fetch them before the build. Pick the arch matching this
+      # matrix leg; skip the dev-only whisper venv. `bash` runs the script on
+      # Windows too (Git Bash ships on the windows-latest runner).
+      - name: Fetch bundle resources
+        shell: bash
+        env:
+          SKIP_WHISPER_VENV: "1"
+          FFMPEG_PLATFORM: ${{ matrix.ffmpeg_platform }}
+        run: ./scripts/setup-resources.sh
+
+      - name: Build and publish (draft release)
+        uses: tauri-apps/tauri-action@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: "SubtitleFlow ${{ github.ref_name }}"
+          releaseBody: |
+            未签名构建：macOS 会被 Gatekeeper 拦、Windows 有 SmartScreen 警告，绕过方法见 README「下载与安装」。
+            已知限制：本版尚未内置 Whisper 运行时，转写功能不可用（ADR-0005 延后打包）。
+          releaseDraft: true
+          prerelease: false
+          args: ${{ matrix.args }}
