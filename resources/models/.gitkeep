@@ -1,0 +1,5 @@
+# This directory holds bundled Whisper GGML models.
+# Model files are git-ignored; fetch the default with:
+#   ./scripts/setup-resources.sh
+# Expected file: ggml-base.bin  (default base model, ~142MB)
+# Larger models (small/medium/large-v3) are downloaded on demand in-app.

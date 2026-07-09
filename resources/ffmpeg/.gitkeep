@@ -1,0 +1,4 @@
+# This directory holds the bundled static ffmpeg binary.
+# The binary itself is git-ignored; fetch it with:
+#   ./scripts/setup-resources.sh
+# Expected file: ffmpeg  (macOS/Apple-Silicon static build)
