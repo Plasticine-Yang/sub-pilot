@@ -2,7 +2,7 @@
 #
 # Downloads the bundled external dependencies SubtitleFlow needs to run:
 #   - ffmpeg  : static macOS/Apple-Silicon binary  -> resources/ffmpeg/ffmpeg
-#   - base model : Whisper GGML "base" model        -> resources/models/ggml-base.bin
+#   - base model : OpenAI Whisper "base" PyTorch model -> resources/models/base.pt
 #
 # These artifacts are git-ignored (see .gitignore) because they are large
 # binaries. Run this script once after cloning so `npm run tauri dev` and the
@@ -24,10 +24,10 @@ FFMPEG_URL="https://github.com/eugeneware/ffmpeg-static/releases/download/b6.1.1
 FFMPEG_SHA256="a90e3db6a3fd35f6074b013f948b1aa45b31c6375489d39e572bea3f18336584"
 FFMPEG_OUT="${FFMPEG_DIR}/ffmpeg"
 
-# Whisper "base" GGML model from ggerganov/whisper.cpp (official checksum).
-MODEL_URL="https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin"
-MODEL_SHA256="60ed5bc3dd14eea856493d334349b405782ddcaf0028d4b5df4088345fba2efe"
-MODEL_OUT="${MODELS_DIR}/ggml-base.bin"
+# OpenAI Whisper "base" PyTorch model (official checksum embedded in URL path).
+MODEL_URL="https://openaipublic.azureedge.net/main/whisper/models/ed3a0b6b1c0edf879ad9b11b1af5a0e6ab5db9205f891f668f8b0e6c6326e34e/base.pt"
+MODEL_SHA256="ed3a0b6b1c0edf879ad9b11b1af5a0e6ab5db9205f891f668f8b0e6c6326e34e"
+MODEL_OUT="${MODELS_DIR}/base.pt"
 
 # --- Helpers ----------------------------------------------------------------
 sha256_of() {

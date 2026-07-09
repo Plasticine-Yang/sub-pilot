@@ -190,13 +190,13 @@ Rust：
 
 -   任务管理
 -   调用 ffmpeg
--   调用 faster-whisper
+-   调用 OpenAI whisper（官方原版，Python + PyTorch）
 -   字幕校验
 -   文件管理
 
 ### AI
 
--   faster-whisper（CLI）
+-   OpenAI whisper（官方原版，随包 Python 运行时）
 
 ### 视频
 

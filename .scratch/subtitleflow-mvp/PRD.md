@@ -43,12 +43,12 @@ Status: ready-for-agent
 ## Implementation Decisions
 
 **平台与技术栈**
-- 首发仅 macOS（Apple Silicon 优先，GPU 加速走 Metal/CoreML）；跨平台是后续目标，本 MVP 不实现（ADR-0001 语境）。
+- 首发仅 macOS（Apple Silicon 优先，GPU 加速走 PyTorch 在 Apple Silicon 上的后端）；跨平台是后续目标，本 MVP 不实现（ADR-0005 语境）。
 - 前端 Tauri v2 + React + TypeScript + TailwindCSS + shadcn/ui；后端 Rust。
 
-**转写引擎（ADR-0001）**
-- 用 whisper.cpp，经 `whisper-rs` 直接链接进 Rust 后端，不使用 faster-whisper，不打包 Python 运行时。
-- 模型采用 GGML/GGUF 格式。
+**转写引擎（ADR-0005，supersede ADR-0001）**
+- 用 OpenAI 官方原版 whisper（Python + PyTorch），由 Rust 后端子进程调用打包的 Python whisper，随应用打包 Python 运行时。
+- 模型采用官方 PyTorch `.pt` 权重（如 `base.pt`）。
 
 **依赖交付（ADR-0002）**
 - ffmpeg 静态二进制随应用打包进 `resources/ffmpeg/`。
@@ -61,7 +61,7 @@ Status: ready-for-agent
 
 **模块与接缝（与用户确认的测试接缝一致）**
 - **接缝 1 — 字幕领域模块（纯逻辑，无 IO）**：SRT 解析、Validation（译文 vs 原始）、Prompt 生成。输入输出为字符串/结构体，无需 mock。校验规则见 ADR-0004。
-- **接缝 2 — 外部进程适配器（trait）**：定义 `Transcriber`（whisper-rs 背后）与 `MediaProcessor`（ffmpeg 抽音频/探测时长/烧录/mux 外挂）两个 trait。编排逻辑（项目状态流转、进度回传、错误映射）依赖 trait，可用假实现替身测试。
+- **接缝 2 — 外部进程适配器（trait）**：定义 `Transcriber`（OpenAI whisper 子进程背后）与 `MediaProcessor`（ffmpeg 抽音频/探测时长/烧录/mux 外挂）两个 trait。编排逻辑（项目状态流转、进度回传、错误映射）依赖 trait，可用假实现替身测试。
 - **Tauri command 层为薄壳**：仅把前端请求转发到上述逻辑，不承载业务逻辑、不单独铺测试接缝，避免接缝扩散。
 
 **校验（ADR-0004）**
@@ -73,7 +73,7 @@ Status: ready-for-agent
 - Burn-in：用 ffmpeg 字幕滤镜将字幕渲染进画面；需处理 CJK 字体嵌入。
 
 **曳光弹顺序（tracer-bullet，供 to-tickets 拆分）**
-1. 导入视频 → ffmpeg 抽音频 → base 模型转写 → 生成并展示 `original.srt`（打通整条技术栈：前端↔Rust↔whisper-rs↔ffmpeg↔项目持久化↔进度回传）。
+1. 导入视频 → ffmpeg 抽音频 → base 模型转写 → 生成并展示 `original.srt`（打通整条技术栈：前端↔Rust↔OpenAI whisper 子进程↔ffmpeg↔项目持久化↔进度回传）。
 2. Prompt 生成（复制 Prompt / 复制字幕 / 一键全部）。
 3. 译文字幕导入 + 校验（硬错误定位到段落）。
 4. 外挂字幕导出。

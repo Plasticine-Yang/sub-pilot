@@ -30,7 +30,7 @@ pub fn evaluate(ffmpeg: ComponentState, model: ComponentState) -> SelfCheckRepor
 
 /// Relative paths of the bundled resources, mirroring `tauri.conf.json`.
 const FFMPEG_RESOURCE: &str = "resources/ffmpeg/ffmpeg";
-const MODEL_RESOURCE: &str = "resources/models/ggml-base.bin";
+const MODEL_RESOURCE: &str = "resources/models/base.pt";
 
 /// Runs the first-launch self-check against the real bundled resources.
 pub fn run_self_check(app: &AppHandle) -> SelfCheckReport {
@@ -120,7 +120,7 @@ mod tests {
     #[test]
     fn probe_file_ok_when_file_exists() {
         let dir = tempfile::tempdir().unwrap();
-        let rel = "resources/models/ggml-base.bin";
+        let rel = "resources/models/base.pt";
         let path = dir.path().join(rel);
         std::fs::create_dir_all(path.parent().unwrap()).unwrap();
         std::fs::write(&path, b"model bytes").unwrap();
@@ -132,7 +132,7 @@ mod tests {
     fn probe_file_missing_when_absent() {
         let dir = tempfile::tempdir().unwrap();
         assert_eq!(
-            probe_file(Some(dir.path()), "resources/models/ggml-base.bin"),
+            probe_file(Some(dir.path()), "resources/models/base.pt"),
             ComponentState::Missing
         );
     }

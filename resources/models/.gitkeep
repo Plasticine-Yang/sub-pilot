@@ -1,5 +1,5 @@
-# This directory holds bundled Whisper GGML models.
+# This directory holds bundled OpenAI Whisper PyTorch models (see ADR-0005).
 # Model files are git-ignored; fetch the default with:
 #   ./scripts/setup-resources.sh
-# Expected file: ggml-base.bin  (default base model, ~142MB)
+# Expected file: base.pt  (default base model, ~145MB)
 # Larger models (small/medium/large-v3) are downloaded on demand in-app.
