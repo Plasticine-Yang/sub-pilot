@@ -33,6 +33,133 @@ pub fn to_srt(cues: &[SubtitleCue]) -> String {
     out
 }
 
+/// Builds the translation Prompt (接缝 1) users paste into any external AI.
+/// Bakes in the segment count and index range so the AI is anchored to the
+/// original subtitle's structure — the invariants Validation later enforces
+/// (段数一致、编号连续、时间轴不动、UTF-8 SRT).
+pub fn build_translation_prompt(cues: &[SubtitleCue]) -> String {
+    let count = cues.len();
+    format!(
+        "你是专业的字幕翻译，请把下面的 SRT 字幕翻译成简体中文。\n\
+\n\
+严格遵守以下规则：\n\
+1. 保持 SRT 结构：每段为「序号 / 时间轴 / 文本」三行，段间空一行。\n\
+2. 段数必须与原文一致，共 {count} 段，不要合并、拆分或增删任何一段。\n\
+3. 序号保持从 1 到 {count} 连续，不要改动。\n\
+4. 时间轴（含 --> 的一行）原样保留，不要改动任何时间戳。\n\
+5. 只翻译文本行，每段译文与原文一一对应。\n\
+6. 输出为合法的 UTF-8 SRT 纯文本，不要添加解释说明、代码块标记或其它多余内容。\n"
+    )
+}
+
+/// A hard validation error (ADR-0004) blocking export of a Translated Subtitle.
+/// Each variant carries enough to point the user at the offending segment.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ValidationError {
+    /// Raw bytes were not valid UTF-8. Not locatable to a segment.
+    NotUtf8,
+    /// The SRT itself is malformed. `block` is the 1-based block ordinal.
+    Syntax { block: usize },
+    /// Segment count differs from the original. `expected`/`found` are counts.
+    SegmentCountMismatch { expected: usize, found: usize },
+    /// A block's SRT index is not the expected consecutive number.
+    IndexMismatch {
+        block: usize,
+        expected: u32,
+        found: u32,
+    },
+}
+
+impl ValidationError {
+    /// The 1-based segment number to highlight in the UI, if the error is
+    /// locatable. `NotUtf8` is a whole-file property, so it has none; a count
+    /// mismatch points at the first segment that goes missing.
+    pub fn segment(&self) -> Option<usize> {
+        match self {
+            ValidationError::NotUtf8 => None,
+            ValidationError::Syntax { block } => Some(*block),
+            ValidationError::IndexMismatch { block, .. } => Some(*block),
+            ValidationError::SegmentCountMismatch { expected, found } => {
+                Some(found.min(expected) + 1)
+            }
+        }
+    }
+}
+
+impl std::fmt::Display for ValidationError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ValidationError::NotUtf8 => write!(f, "译文字幕不是合法的 UTF-8 编码"),
+            ValidationError::Syntax { block } => {
+                write!(f, "第 {block} 段 SRT 语法非法")
+            }
+            ValidationError::SegmentCountMismatch { expected, found } => write!(
+                f,
+                "译文段数（{found}）与原始字幕段数（{expected}）不一致"
+            ),
+            ValidationError::IndexMismatch {
+                block,
+                expected,
+                found,
+            } => write!(f, "第 {block} 段编号应为 {expected}，实际为 {found}"),
+        }
+    }
+}
+
+impl std::error::Error for ValidationError {}
+
+/// Validates a Translated Subtitle (raw bytes) against the original cues and,
+/// on success, returns cues that adopt the original timeline while taking text
+/// from the translation (ADR-0004: 时间轴以原始字幕为准，译文只贡献文本).
+///
+/// Hard errors, checked in order of coarseness: non-UTF-8 → SRT syntax → 段数
+/// 不一致 → 编号不连续. Timestamps in the translation are intentionally ignored.
+pub fn validate_translation(
+    original: &[SubtitleCue],
+    translated_bytes: &[u8],
+) -> Result<Vec<SubtitleCue>, ValidationError> {
+    let text = std::str::from_utf8(translated_bytes).map_err(|_| ValidationError::NotUtf8)?;
+    let translated = parse_srt(text).map_err(|e| ValidationError::Syntax {
+        block: srt_error_block(&e),
+    })?;
+
+    if translated.len() != original.len() {
+        return Err(ValidationError::SegmentCountMismatch {
+            expected: original.len(),
+            found: translated.len(),
+        });
+    }
+
+    let mut merged = Vec::with_capacity(original.len());
+    for (i, (orig, trans)) in original.iter().zip(&translated).enumerate() {
+        let expected_index = (i + 1) as u32;
+        if trans.index != expected_index {
+            return Err(ValidationError::IndexMismatch {
+                block: i + 1,
+                expected: expected_index,
+                found: trans.index,
+            });
+        }
+        merged.push(SubtitleCue {
+            index: orig.index,
+            start_ms: orig.start_ms,
+            end_ms: orig.end_ms,
+            text: trans.text.clone(),
+        });
+    }
+    Ok(merged)
+}
+
+/// The 1-based block ordinal an `SrtParseError` points at.
+fn srt_error_block(err: &SrtParseError) -> usize {
+    match err {
+        SrtParseError::InvalidIndex { block, .. }
+        | SrtParseError::MissingTiming { block }
+        | SrtParseError::InvalidTiming { block, .. }
+        | SrtParseError::MissingText { block } => *block,
+    }
+}
+
 /// Formats milliseconds as an SRT timestamp `HH:MM:SS,mmm`.
 fn format_timestamp(total_ms: u64) -> String {
     let ms = total_ms % 1000;
@@ -267,6 +394,152 @@ mod tests {
                 block: 2,
                 found: "bad timing here".to_string()
             })
+        );
+    }
+
+    // --- build_translation_prompt (接缝 1，纯函数) ---------------------------
+
+    #[test]
+    fn prompt_matches_expected_text_for_two_cues() {
+        let cues = vec![cue(1, 0, 2000, "First"), cue(2, 2000, 4500, "Second")];
+        let expected = "你是专业的字幕翻译，请把下面的 SRT 字幕翻译成简体中文。\n\
+\n\
+严格遵守以下规则：\n\
+1. 保持 SRT 结构：每段为「序号 / 时间轴 / 文本」三行，段间空一行。\n\
+2. 段数必须与原文一致，共 2 段，不要合并、拆分或增删任何一段。\n\
+3. 序号保持从 1 到 2 连续，不要改动。\n\
+4. 时间轴（含 --> 的一行）原样保留，不要改动任何时间戳。\n\
+5. 只翻译文本行，每段译文与原文一一对应。\n\
+6. 输出为合法的 UTF-8 SRT 纯文本，不要添加解释说明、代码块标记或其它多余内容。\n";
+        assert_eq!(build_translation_prompt(&cues), expected);
+    }
+
+    #[test]
+    fn prompt_reflects_the_segment_count() {
+        let five: Vec<SubtitleCue> = (1..=5).map(|i| cue(i, 0, 1000, "x")).collect();
+        let text = build_translation_prompt(&five);
+        assert!(text.contains("共 5 段"), "got: {text}");
+        assert!(text.contains("从 1 到 5 连续"), "got: {text}");
+    }
+
+    #[test]
+    fn prompt_handles_empty_cues() {
+        let text = build_translation_prompt(&[]);
+        assert!(text.contains("共 0 段"), "got: {text}");
+    }
+
+    // --- validate_translation (接缝 1，纯函数) ------------------------------
+
+    fn original() -> Vec<SubtitleCue> {
+        vec![cue(1, 0, 1000, "Hello"), cue(2, 1000, 2000, "World")]
+    }
+
+    #[test]
+    fn valid_translation_adopts_original_timeline_and_translated_text() {
+        // Translated deliberately carries different timestamps; per ADR-0004 the
+        // original timeline wins and only the text is taken from the translation.
+        let translated = "1\n00:09:09,900 --> 00:09:10,900\n你好\n\n\
+2\n00:00:05,000 --> 00:00:06,000\n世界\n";
+        assert_eq!(
+            validate_translation(&original(), translated.as_bytes()),
+            Ok(vec![cue(1, 0, 1000, "你好"), cue(2, 1000, 2000, "世界")])
+        );
+    }
+
+    #[test]
+    fn rejects_missing_segment_as_count_mismatch() {
+        let translated = "1\n00:00:00,000 --> 00:00:01,000\n你好\n";
+        assert_eq!(
+            validate_translation(&original(), translated.as_bytes()),
+            Err(ValidationError::SegmentCountMismatch {
+                expected: 2,
+                found: 1
+            })
+        );
+    }
+
+    #[test]
+    fn rejects_extra_segment_as_count_mismatch() {
+        let translated = "1\n00:00:00,000 --> 00:00:01,000\n你好\n\n\
+2\n00:00:01,000 --> 00:00:02,000\n世界\n\n\
+3\n00:00:02,000 --> 00:00:03,000\n多余\n";
+        assert_eq!(
+            validate_translation(&original(), translated.as_bytes()),
+            Err(ValidationError::SegmentCountMismatch {
+                expected: 2,
+                found: 3
+            })
+        );
+    }
+
+    #[test]
+    fn rejects_discontinuous_index_and_locates_the_block() {
+        // Correct count, but the second block is numbered 3 instead of 2.
+        let translated = "1\n00:00:00,000 --> 00:00:01,000\n你好\n\n\
+3\n00:00:01,000 --> 00:00:02,000\n世界\n";
+        assert_eq!(
+            validate_translation(&original(), translated.as_bytes()),
+            Err(ValidationError::IndexMismatch {
+                block: 2,
+                expected: 2,
+                found: 3
+            })
+        );
+    }
+
+    #[test]
+    fn rejects_non_utf8_bytes() {
+        // 0xFF is never valid in UTF-8.
+        let translated = b"1\n00:00:00,000 --> 00:00:01,000\n\xff\xfe\n";
+        assert_eq!(
+            validate_translation(&original(), translated),
+            Err(ValidationError::NotUtf8)
+        );
+    }
+
+    #[test]
+    fn rejects_invalid_srt_syntax_and_locates_the_block() {
+        let translated = "1\nnot a timing line\n你好\n";
+        assert_eq!(
+            validate_translation(&original(), translated.as_bytes()),
+            Err(ValidationError::Syntax { block: 1 })
+        );
+    }
+
+    #[test]
+    fn count_mismatch_takes_priority_over_index_mismatch() {
+        // Both wrong count and wrong indices: count is the coarser error.
+        let translated = "5\n00:00:00,000 --> 00:00:01,000\n只有一段\n";
+        assert_eq!(
+            validate_translation(&original(), translated.as_bytes()),
+            Err(ValidationError::SegmentCountMismatch {
+                expected: 2,
+                found: 1
+            })
+        );
+    }
+
+    #[test]
+    fn validation_error_locates_segment_for_the_ui() {
+        assert_eq!(ValidationError::NotUtf8.segment(), None);
+        assert_eq!(ValidationError::Syntax { block: 3 }.segment(), Some(3));
+        assert_eq!(
+            ValidationError::IndexMismatch {
+                block: 2,
+                expected: 2,
+                found: 9
+            }
+            .segment(),
+            Some(2)
+        );
+        assert_eq!(
+            ValidationError::SegmentCountMismatch {
+                expected: 10,
+                found: 8
+            }
+            .segment(),
+            // Locate to the first segment that goes missing.
+            Some(9)
         );
     }
 }

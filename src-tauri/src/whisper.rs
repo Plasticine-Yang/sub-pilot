@@ -16,13 +16,35 @@ use std::process::{Command, Stdio};
 pub struct WhisperTranscriber {
     /// Path to the whisper executable (bundled Python entry point).
     whisper: PathBuf,
-    /// Directory holding the `<model>.pt` weights.
-    model_dir: PathBuf,
+    /// Read-only bundle dir holding the built-in `base.pt`.
+    bundled_model_dir: PathBuf,
+    /// Writable app-data dir holding on-demand downloaded `<model>.pt` weights.
+    downloads_model_dir: PathBuf,
 }
 
 impl WhisperTranscriber {
-    pub fn new(whisper: PathBuf, model_dir: PathBuf) -> Self {
-        Self { whisper, model_dir }
+    pub fn new(
+        whisper: PathBuf,
+        bundled_model_dir: PathBuf,
+        downloads_model_dir: PathBuf,
+    ) -> Self {
+        Self {
+            whisper,
+            bundled_model_dir,
+            downloads_model_dir,
+        }
+    }
+
+    /// The directory that actually holds `<model>.pt`: the downloads dir if the
+    /// weight is there, else the bundle. whisper's `--model_dir` takes one path,
+    /// so we resolve which one to hand it.
+    fn model_dir_for(&self, model: &str) -> &Path {
+        let file = format!("{model}.pt");
+        if self.downloads_model_dir.join(&file).is_file() {
+            &self.downloads_model_dir
+        } else {
+            &self.bundled_model_dir
+        }
     }
 }
 
@@ -42,7 +64,7 @@ impl Transcriber for WhisperTranscriber {
             .arg(audio)
             .args(["--model", model])
             .arg("--model_dir")
-            .arg(&self.model_dir)
+            .arg(self.model_dir_for(model))
             .args(["--output_format", "srt", "--verbose", "True"])
             .arg("--output_dir")
             .arg(out_dir)

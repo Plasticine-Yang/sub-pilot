@@ -8,6 +8,7 @@ use std::path::{Path, PathBuf};
 /// Canonical file names inside a Project directory.
 pub const PROJECT_FILE: &str = "project.json";
 pub const ORIGINAL_SRT: &str = "original.srt";
+pub const TRANSLATED_SRT: &str = "translated.srt";
 
 /// Explicit project state machine. Ticket 1 covers `imported → transcribing →
 /// transcribed`; `failed` is the failure state. Later tickets extend it
@@ -18,6 +19,10 @@ pub enum ProjectStatus {
     Imported,
     Transcribing,
     Transcribed,
+    PromptReady,
+    TranslationImported,
+    Validated,
+    Exported,
     Failed,
 }
 

@@ -3,6 +3,7 @@
 # Downloads the bundled external dependencies SubtitleFlow needs to run:
 #   - ffmpeg  : static macOS/Apple-Silicon binary  -> resources/ffmpeg/ffmpeg
 #   - base model : OpenAI Whisper "base" PyTorch model -> resources/models/base.pt
+#   - CJK font : Noto Sans CJK SC for burn-in         -> resources/fonts/NotoSansCJKsc-Regular.otf
 #
 # These artifacts are git-ignored (see .gitignore) because they are large
 # binaries. Run this script once after cloning so `npm run tauri dev` and the
@@ -17,6 +18,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 FFMPEG_DIR="${REPO_ROOT}/resources/ffmpeg"
 MODELS_DIR="${REPO_ROOT}/resources/models"
+FONTS_DIR="${REPO_ROOT}/resources/fonts"
 
 # --- Pinned artifacts (URL + expected SHA-256) -----------------------------
 # ffmpeg 6.0 static arm64 from eugeneware/ffmpeg-static (release b6.1.1).
@@ -28,6 +30,11 @@ FFMPEG_OUT="${FFMPEG_DIR}/ffmpeg"
 MODEL_URL="https://openaipublic.azureedge.net/main/whisper/models/ed3a0b6b1c0edf879ad9b11b1af5a0e6ab5db9205f891f668f8b0e6c6326e34e/base.pt"
 MODEL_SHA256="ed3a0b6b1c0edf879ad9b11b1af5a0e6ab5db9205f891f668f8b0e6c6326e34e"
 MODEL_OUT="${MODELS_DIR}/base.pt"
+
+# Noto Sans CJK SC (Regular) — bundled so burn-in renders 中文/日文 glyphs.
+FONT_URL="https://github.com/notofonts/noto-cjk/raw/main/Sans/OTF/SimplifiedChinese/NotoSansCJKsc-Regular.otf"
+FONT_SHA256="2c76254f6fc379fddfce0a7e84fb5385bb135d3e399294f6eeb6680d0365b74b"
+FONT_OUT="${FONTS_DIR}/NotoSansCJKsc-Regular.otf"
 
 # --- Helpers ----------------------------------------------------------------
 sha256_of() {
@@ -74,4 +81,5 @@ fetch() {
 echo "SubtitleFlow — fetching bundled resources into resources/"
 fetch "${FFMPEG_URL}" "${FFMPEG_OUT}" "${FFMPEG_SHA256}" "755"
 fetch "${MODEL_URL}"  "${MODEL_OUT}"  "${MODEL_SHA256}"  "644"
+fetch "${FONT_URL}"   "${FONT_OUT}"   "${FONT_SHA256}"   "644"
 echo "Done. Resources are ready under resources/."

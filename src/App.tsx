@@ -1,21 +1,24 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
-import { openPath, revealItemInDir } from "@tauri-apps/plugin-opener";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import {
   selfCheck,
   importVideo,
   startTranscription,
   readOriginalSrt,
-  projectLocation,
+  openProject,
   onTranscriptionEvent,
   ProjectStatus,
+  ModelId,
   type SelfCheckReport,
   type Project,
   ComponentState,
 } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { ResultView } from "@/components/ResultView";
+import { ModelPicker } from "@/components/ModelPicker";
+import { RecentProjects } from "@/components/RecentProjects";
 import { cn, formatDuration, formatEta } from "@/lib/utils";
 
 enum CheckPhase {
@@ -118,10 +121,14 @@ function ImportZone({
   ready,
   onImport,
   error,
+  model,
+  onSelectModel,
 }: {
   ready: boolean;
   onImport: (path: string) => void;
   error: string | null;
+  model: ModelId;
+  onSelectModel: (model: ModelId) => void;
 }) {
   const [dragging, setDragging] = useState(false);
 
@@ -165,20 +172,29 @@ function ImportZone({
   }, [onImport]);
 
   return (
-    <Card
-      className={cn(
-        "flex flex-col items-center justify-center gap-3 border-2 border-dashed py-16 text-center transition-colors",
-        ready ? "border-border" : "border-border/60 opacity-60",
-        dragging && ready && "border-primary bg-primary/5",
-      )}
-    >
-      <p className="text-base font-medium">拖拽视频到此处，或选择文件</p>
-      <p className="text-sm text-muted-foreground">支持 MP4 / MKV / MOV / AVI</p>
-      <Button disabled={!ready} onClick={pick}>
-        选择视频
-      </Button>
-      {error && <p className="text-sm text-destructive">{error}</p>}
-    </Card>
+    <div className="space-y-4">
+      <Card className="px-6 py-4">
+        <ModelPicker
+          selected={model}
+          onSelect={onSelectModel}
+          disabled={!ready}
+        />
+      </Card>
+      <Card
+        className={cn(
+          "flex flex-col items-center justify-center gap-3 border-2 border-dashed py-16 text-center transition-colors",
+          ready ? "border-border" : "border-border/60 opacity-60",
+          dragging && ready && "border-primary bg-primary/5",
+        )}
+      >
+        <p className="text-base font-medium">拖拽视频到此处，或选择文件</p>
+        <p className="text-sm text-muted-foreground">支持 MP4 / MKV / MOV / AVI</p>
+        <Button disabled={!ready} onClick={pick}>
+          选择视频
+        </Button>
+        {error && <p className="text-sm text-destructive">{error}</p>}
+      </Card>
+    </div>
   );
 }
 
@@ -218,53 +234,6 @@ function TranscribingView({
   );
 }
 
-function TranscribedView({
-  project,
-  srt,
-  onReset,
-}: {
-  project: Project;
-  srt: string;
-  onReset: () => void;
-}) {
-  const openSubtitle = useCallback(async () => {
-    const loc = await projectLocation(project.id);
-    await openPath(loc.originalSrt);
-  }, [project.id]);
-
-  const openDirectory = useCallback(async () => {
-    const loc = await projectLocation(project.id);
-    await revealItemInDir(loc.originalSrt);
-  }, [project.id]);
-
-  return (
-    <Card className="gap-4 px-6 py-6">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <p className="font-medium">{project.videoFileName}</p>
-          <p className="text-sm text-muted-foreground">
-            时长 {formatDuration(project.durationMs)} · 原始字幕已生成
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={openSubtitle}>
-            打开字幕
-          </Button>
-          <Button variant="outline" size="sm" onClick={openDirectory}>
-            打开目录
-          </Button>
-          <Button variant="ghost" size="sm" onClick={onReset}>
-            新建
-          </Button>
-        </div>
-      </div>
-      <pre className="max-h-96 overflow-auto rounded-md bg-muted/50 p-4 text-xs leading-relaxed whitespace-pre-wrap">
-        {srt}
-      </pre>
-    </Card>
-  );
-}
-
 function FailedView({
   project,
   onReset,
@@ -291,29 +260,55 @@ function Workspace({
   project,
   progress,
   srt,
+  translatedSrt,
   ready,
   importError,
   onImport,
   onReset,
+  onStatusChange,
+  model,
+  onSelectModel,
 }: {
   project: Project | null;
   progress: Progress | null;
   srt: string | null;
+  translatedSrt: string | null;
   ready: boolean;
   importError: string | null;
   onImport: (path: string) => void;
   onReset: () => void;
+  onStatusChange: (status: ProjectStatus) => void;
+  model: ModelId;
+  onSelectModel: (model: ModelId) => void;
 }) {
   if (!project) {
-    return <ImportZone ready={ready} onImport={onImport} error={importError} />;
+    return (
+      <ImportZone
+        ready={ready}
+        onImport={onImport}
+        error={importError}
+        model={model}
+        onSelectModel={onSelectModel}
+      />
+    );
   }
   switch (project.status) {
     case ProjectStatus.Imported:
     case ProjectStatus.Transcribing:
       return <TranscribingView project={project} progress={progress} />;
     case ProjectStatus.Transcribed:
+    case ProjectStatus.PromptReady:
+    case ProjectStatus.TranslationImported:
+    case ProjectStatus.Validated:
+    case ProjectStatus.Exported:
       return srt !== null ? (
-        <TranscribedView project={project} srt={srt} onReset={onReset} />
+        <ResultView
+          project={project}
+          srt={srt}
+          onReset={onReset}
+          onStatusChange={onStatusChange}
+          initialTranslatedSrt={translatedSrt}
+        />
       ) : (
         <TranscribingView project={project} progress={progress} />
       );
@@ -329,7 +324,9 @@ function App() {
   const [project, setProject] = useState<Project | null>(null);
   const [progress, setProgress] = useState<Progress | null>(null);
   const [srt, setSrt] = useState<string | null>(null);
+  const [translatedSrt, setTranslatedSrt] = useState<string | null>(null);
   const [importError, setImportError] = useState<string | null>(null);
+  const [model, setModel] = useState<ModelId>(ModelId.Base);
   const projectRef = useRef<Project | null>(null);
 
   useEffect(() => {
@@ -362,25 +359,57 @@ function App() {
     };
   }, []);
 
-  const handleImport = useCallback(async (path: string) => {
-    setImportError(null);
-    try {
-      const proj = await importVideo(path);
-      setProject(proj);
-      setProgress(null);
-      setSrt(null);
-      await startTranscription(proj.id);
-      setProject({ ...proj, status: ProjectStatus.Transcribing });
-    } catch (err) {
-      setImportError(String(err));
-    }
-  }, []);
+  const handleImport = useCallback(
+    async (path: string) => {
+      setImportError(null);
+      try {
+        const proj = await importVideo(path, model);
+        setProject(proj);
+        setProgress(null);
+        setSrt(null);
+        setTranslatedSrt(null);
+        await startTranscription(proj.id);
+        setProject({ ...proj, status: ProjectStatus.Transcribing });
+      } catch (err) {
+        setImportError(String(err));
+      }
+    },
+    [model],
+  );
 
   const reset = useCallback(() => {
     setProject(null);
     setProgress(null);
     setSrt(null);
+    setTranslatedSrt(null);
     setImportError(null);
+  }, []);
+
+  const handleStatusChange = useCallback((status: ProjectStatus) => {
+    setProject((current) => (current ? { ...current, status } : current));
+  }, []);
+
+  const openRecent = useCallback(async (projectId: string) => {
+    setImportError(null);
+    try {
+      const opened = await openProject(projectId);
+      setProgress(null);
+      setSrt(opened.originalSrt ?? null);
+      setTranslatedSrt(opened.translatedSrt ?? null);
+      // A project interrupted before transcription finished resumes from where
+      // it left off; otherwise it restores to its saved step.
+      if (
+        opened.project.status === ProjectStatus.Imported ||
+        opened.project.status === ProjectStatus.Transcribing
+      ) {
+        setProject({ ...opened.project, status: ProjectStatus.Transcribing });
+        await startTranscription(opened.project.id);
+      } else {
+        setProject(opened.project);
+      }
+    } catch (err) {
+      setImportError(String(err));
+    }
   }, []);
 
   return (
@@ -399,21 +428,18 @@ function App() {
           project={project}
           progress={progress}
           srt={srt}
+          translatedSrt={translatedSrt}
           ready={ready}
           importError={importError}
           onImport={handleImport}
           onReset={reset}
+          onStatusChange={handleStatusChange}
+          model={model}
+          onSelectModel={setModel}
         />
       </section>
 
-      {!project && (
-        <section aria-label="最近项目" className="space-y-3">
-          <h2 className="text-sm font-medium text-muted-foreground">最近项目</h2>
-          <Card className="px-4 py-8 text-center text-sm text-muted-foreground">
-            还没有项目。导入一个视频即可开始。
-          </Card>
-        </section>
-      )}
+      {!project && <RecentProjects onOpen={openRecent} />}
     </main>
   );
 }

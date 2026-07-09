@@ -24,6 +24,21 @@ pub trait MediaProcessor {
     fn probe_duration_ms(&self, video: &Path) -> Result<u64, String>;
     /// Extracts an audio track suitable for transcription to `out_wav`.
     fn extract_audio(&self, video: &Path, out_wav: &Path) -> Result<(), String>;
+    /// Muxes `subtitle` into `video` as a switchable soft subtitle track,
+    /// writing the result to `out_video` (Sidecar 导出的可开关软字幕轨).
+    fn mux_subtitle(&self, video: &Path, subtitle: &Path, out_video: &Path)
+        -> Result<(), String>;
+    /// Burns `subtitle` into `video`'s pixels (Burn-in), writing `out_video`.
+    /// Reports fractional progress (`0.0..=1.0`) via `on_progress`;
+    /// `total_duration_ms` turns ffmpeg's `time=` position into a fraction.
+    fn burn_in(
+        &self,
+        video: &Path,
+        subtitle: &Path,
+        out_video: &Path,
+        total_duration_ms: u64,
+        on_progress: &mut dyn FnMut(f32),
+    ) -> Result<(), String>;
 }
 
 /// whisper-backed transcription. Real impl shells out to Python whisper.
@@ -223,6 +238,24 @@ mod tests {
             self.extract.clone()?;
             std::fs::write(out_wav, b"fake wav").unwrap();
             Ok(())
+        }
+        fn mux_subtitle(
+            &self,
+            _video: &Path,
+            _subtitle: &Path,
+            _out_video: &Path,
+        ) -> Result<(), String> {
+            unreachable!("transcription orchestration never muxes subtitles")
+        }
+        fn burn_in(
+            &self,
+            _video: &Path,
+            _subtitle: &Path,
+            _out_video: &Path,
+            _total_duration_ms: u64,
+            _on_progress: &mut dyn FnMut(f32),
+        ) -> Result<(), String> {
+            unreachable!("transcription orchestration never burns in subtitles")
         }
     }
 

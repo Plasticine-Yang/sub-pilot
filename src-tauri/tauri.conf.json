@@ -26,7 +26,8 @@
     "targets": "all",
     "resources": {
       "../resources/ffmpeg/ffmpeg": "resources/ffmpeg/ffmpeg",
-      "../resources/models/base.pt": "resources/models/base.pt"
+      "../resources/models/base.pt": "resources/models/base.pt",
+      "../resources/fonts/NotoSansCJKsc-Regular.otf": "resources/fonts/NotoSansCJKsc-Regular.otf"
     },
     "icon": [
       "icons/32x32.png",
