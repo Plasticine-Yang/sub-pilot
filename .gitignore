@@ -30,3 +30,6 @@ dist-ssr
 !/resources/models/.gitkeep
 /resources/fonts/*
 !/resources/fonts/.gitkeep
+# Dev whisper runtime (venv) — provisioned locally, never committed. The
+# launcher script itself is tracked; the venv it resolves to is not.
+/resources/whisper/venv/

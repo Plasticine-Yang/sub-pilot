@@ -19,25 +19,39 @@ pub struct SelfCheckReport {
     pub ok: bool,
     pub ffmpeg: ComponentState,
     pub model: ComponentState,
+    pub whisper: ComponentState,
 }
 
 /// Pure mapping from raw probe outcomes to the report the UI consumes.
 /// No IO — the caller performs the filesystem/executable probes.
-pub fn evaluate(ffmpeg: ComponentState, model: ComponentState) -> SelfCheckReport {
-    let ok = ffmpeg == ComponentState::Ok && model == ComponentState::Ok;
-    SelfCheckReport { ok, ffmpeg, model }
+pub fn evaluate(
+    ffmpeg: ComponentState,
+    model: ComponentState,
+    whisper: ComponentState,
+) -> SelfCheckReport {
+    let ok = ffmpeg == ComponentState::Ok
+        && model == ComponentState::Ok
+        && whisper == ComponentState::Ok;
+    SelfCheckReport {
+        ok,
+        ffmpeg,
+        model,
+        whisper,
+    }
 }
 
 /// Relative paths of the bundled resources, mirroring `tauri.conf.json`.
 const FFMPEG_RESOURCE: &str = "resources/ffmpeg/ffmpeg";
 const MODEL_RESOURCE: &str = "resources/models/base.pt";
+const WHISPER_RESOURCE: &str = "resources/whisper/whisper";
 
 /// Runs the first-launch self-check against the real bundled resources.
 pub fn run_self_check(app: &AppHandle) -> SelfCheckReport {
     let resource_dir = app.path().resource_dir().ok();
     let ffmpeg = probe_executable(resource_dir.as_deref(), FFMPEG_RESOURCE);
     let model = probe_file(resource_dir.as_deref(), MODEL_RESOURCE);
-    evaluate(ffmpeg, model)
+    let whisper = probe_executable(resource_dir.as_deref(), WHISPER_RESOURCE);
+    evaluate(ffmpeg, model, whisper)
 }
 
 fn probe_file(resource_dir: Option<&Path>, rel: &str) -> ComponentState {
@@ -81,15 +95,16 @@ mod tests {
 
     #[test]
     fn all_present_reports_ok() {
-        let report = evaluate(ComponentState::Ok, ComponentState::Ok);
+        let report = evaluate(ComponentState::Ok, ComponentState::Ok, ComponentState::Ok);
         assert!(report.ok);
         assert_eq!(report.ffmpeg, ComponentState::Ok);
         assert_eq!(report.model, ComponentState::Ok);
+        assert_eq!(report.whisper, ComponentState::Ok);
     }
 
     #[test]
     fn missing_ffmpeg_fails() {
-        let report = evaluate(ComponentState::Missing, ComponentState::Ok);
+        let report = evaluate(ComponentState::Missing, ComponentState::Ok, ComponentState::Ok);
         assert!(!report.ok);
         assert_eq!(report.ffmpeg, ComponentState::Missing);
         assert_eq!(report.model, ComponentState::Ok);
@@ -97,21 +112,36 @@ mod tests {
 
     #[test]
     fn not_executable_ffmpeg_fails() {
-        let report = evaluate(ComponentState::NotExecutable, ComponentState::Ok);
+        let report = evaluate(
+            ComponentState::NotExecutable,
+            ComponentState::Ok,
+            ComponentState::Ok,
+        );
         assert!(!report.ok);
         assert_eq!(report.ffmpeg, ComponentState::NotExecutable);
     }
 
     #[test]
     fn missing_model_fails() {
-        let report = evaluate(ComponentState::Ok, ComponentState::Missing);
+        let report = evaluate(ComponentState::Ok, ComponentState::Missing, ComponentState::Ok);
         assert!(!report.ok);
         assert_eq!(report.model, ComponentState::Missing);
     }
 
     #[test]
+    fn missing_whisper_fails() {
+        let report = evaluate(ComponentState::Ok, ComponentState::Ok, ComponentState::Missing);
+        assert!(!report.ok);
+        assert_eq!(report.whisper, ComponentState::Missing);
+    }
+
+    #[test]
     fn both_missing_fails() {
-        let report = evaluate(ComponentState::Missing, ComponentState::Missing);
+        let report = evaluate(
+            ComponentState::Missing,
+            ComponentState::Missing,
+            ComponentState::Ok,
+        );
         assert!(!report.ok);
         assert_eq!(report.ffmpeg, ComponentState::Missing);
         assert_eq!(report.model, ComponentState::Missing);

@@ -142,6 +142,49 @@ fn parse_clock(s: &str) -> Option<u64> {
 mod tests {
     use super::*;
 
+    // End-to-end guard for the "stuck at 0%" bug: with the whisper runtime
+    // provisioned, spawning the real CLI against a real 16 kHz wav must emit a
+    // verbose progress line (fraction > 0) and produce an SRT. Ignored by
+    // default because it shells out to the bundled model + venv; run with:
+    //   cargo test --lib whisper::tests::real_whisper_emits_progress_and_srt \
+    //     -- --ignored --nocapture
+    #[test]
+    #[ignore = "shells out to the whisper venv + base model; run with --ignored"]
+    fn real_whisper_emits_progress_and_srt() {
+        let repo = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .unwrap()
+            .to_path_buf();
+        let fixture = repo.join("resources/whisper/fixture_audio.wav");
+        assert!(
+            fixture.is_file(),
+            "fixture wav missing at {fixture:?}; extract one with ffmpeg -i demo.mp4 -vn -ac 1 -ar 16000"
+        );
+        // whisper writes its SRT next to the audio; copy into a tempdir so the
+        // test stays hermetic and never dirties the tracked resources/ tree.
+        let work = tempfile::tempdir().unwrap();
+        let audio = work.path().join("fixture_audio.wav");
+        std::fs::copy(&fixture, &audio).unwrap();
+
+        let transcriber = WhisperTranscriber::new(
+            repo.join("resources/whisper/whisper"),
+            repo.join("resources/models"),
+            repo.join("resources/models"),
+        );
+        let mut fractions = Vec::new();
+        let cues = transcriber
+            .transcribe(&audio, "base", 7300, &mut |f| fractions.push(f))
+            .expect("real whisper should transcribe once provisioned");
+
+        // The freeze symptom was "no progress ever arrives". A mid-run fraction
+        // in (0,1) proves verbose lines were parsed — not just the terminal 1.0.
+        assert!(
+            fractions.iter().any(|&f| f > 0.0 && f < 1.0),
+            "expected a mid-run progress fraction in (0,1) (the 0% freeze symptom), got {fractions:?}"
+        );
+        assert!(!cues.is_empty(), "expected at least one cue");
+    }
+
     #[test]
     fn parses_progress_from_real_verbose_line() {
         // Real whisper verbose format: "[00:07.000 --> 00:15.000] text"

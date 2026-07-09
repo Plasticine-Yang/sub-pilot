@@ -35,6 +35,7 @@ type CheckStatus =
 const COMPONENT_LABELS: Record<keyof Omit<SelfCheckReport, "ok">, string> = {
   ffmpeg: "ffmpeg",
   model: "base 模型",
+  whisper: "whisper 运行时",
 };
 
 const SUPPORTED_EXT = ["mp4", "mkv", "mov", "avi"];
@@ -95,7 +96,7 @@ function DependencyBanner({ status }: { status: CheckStatus }) {
   const { report } = status;
   if (report.ok) return null;
 
-  const problems = (["ffmpeg", "model"] as const)
+  const problems = (["ffmpeg", "model", "whisper"] as const)
     .filter((key) => report[key] !== ComponentState.Ok)
     .map((key) => problemDetail(COMPONENT_LABELS[key], report[key]));
 
@@ -345,6 +346,17 @@ function App() {
         setProject({ ...current, status: event.status });
         if (event.status === ProjectStatus.Transcribed) {
           readOriginalSrt(current.id).then(setSrt).catch(() => setSrt(""));
+        } else if (event.status === ProjectStatus.Failed) {
+          // The backend persists the failure reason to project.json before
+          // emitting `failed`; reload it so the view shows the real cause
+          // instead of a bare "未知错误".
+          openProject(current.id)
+            .then((opened) =>
+              setProject((prev) =>
+                prev && prev.id === opened.project.id ? opened.project : prev,
+              ),
+            )
+            .catch(() => {});
         }
       }
     })
@@ -364,12 +376,11 @@ function App() {
       setImportError(null);
       try {
         const proj = await importVideo(path, model);
-        setProject(proj);
+        setProject({ ...proj, status: ProjectStatus.Transcribing });
         setProgress(null);
         setSrt(null);
         setTranslatedSrt(null);
         await startTranscription(proj.id);
-        setProject({ ...proj, status: ProjectStatus.Transcribing });
       } catch (err) {
         setImportError(String(err));
       }

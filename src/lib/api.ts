@@ -11,6 +11,7 @@ export interface SelfCheckReport {
   ok: boolean;
   ffmpeg: ComponentState;
   model: ComponentState;
+  whisper: ComponentState;
 }
 
 /** First-launch self-check of bundled ffmpeg + base model. */

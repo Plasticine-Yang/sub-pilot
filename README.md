@@ -19,15 +19,16 @@
 # 1. 安装前端依赖
 npm install
 
-# 2. 拉取随包二进制资源（ffmpeg 静态二进制 + Whisper base.pt 模型）
-#    这两个文件较大且不入库，由脚本按校验和下载到 resources/ 下
+# 2. 拉取随包资源（ffmpeg 静态二进制 + Whisper base.pt 模型 + whisper 运行时）
+#    大文件不入库，由脚本按校验和下载到 resources/ 下；并在
+#    resources/whisper/venv 里装好 openai-whisper（需本机有 python3）
 ./scripts/setup-resources.sh
 
 # 3. 启动桌面应用（开发模式）
 npm run tauri dev
 ```
 
-首次启动时应用会自检 `resources/ffmpeg/ffmpeg` 可执行、`resources/models/base.pt` 存在；缺失时首页会给出明确提示。
+首次启动时应用会自检 `resources/ffmpeg/ffmpeg` 可执行、`resources/models/base.pt` 存在、`resources/whisper/whisper` 可执行；缺失时首页会给出明确提示。
 
 ## 常用脚本
 

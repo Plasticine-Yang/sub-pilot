@@ -4,6 +4,9 @@
 #   - ffmpeg  : static macOS/Apple-Silicon binary  -> resources/ffmpeg/ffmpeg
 #   - base model : OpenAI Whisper "base" PyTorch model -> resources/models/base.pt
 #   - CJK font : Noto Sans CJK SC for burn-in         -> resources/fonts/NotoSansCJKsc-Regular.otf
+#   - whisper : OpenAI whisper CLI in a venv          -> resources/whisper/venv
+#     (the Rust backend spawns resources/whisper/whisper, which forwards to it;
+#      ADR-0005's fully-bundled Python runtime is deferred — this is the dev path)
 #
 # These artifacts are git-ignored (see .gitignore) because they are large
 # binaries. Run this script once after cloning so `npm run tauri dev` and the
@@ -19,6 +22,7 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 FFMPEG_DIR="${REPO_ROOT}/resources/ffmpeg"
 MODELS_DIR="${REPO_ROOT}/resources/models"
 FONTS_DIR="${REPO_ROOT}/resources/fonts"
+WHISPER_DIR="${REPO_ROOT}/resources/whisper"
 
 # --- Pinned artifacts (URL + expected SHA-256) -----------------------------
 # ffmpeg 6.0 static arm64 from eugeneware/ffmpeg-static (release b6.1.1).
@@ -77,9 +81,32 @@ fetch() {
   echo "✓ $(basename "${out}") downloaded and verified"
 }
 
+# --- whisper runtime (venv) -------------------------------------------------
+# The Rust backend spawns resources/whisper/whisper (a tracked launcher) which
+# forwards to a whisper CLI. Provision it in a co-located venv so dev runs
+# transcribe for real. Idempotent: an existing working CLI is left untouched.
+provision_whisper() {
+  local venv="${WHISPER_DIR}/venv"
+  if [[ -x "${venv}/bin/whisper" ]]; then
+    echo "✓ whisper venv already present"
+    return 0
+  fi
+  if ! command -v python3 >/dev/null 2>&1; then
+    echo "✗ python3 not found — install Python 3 to provision the whisper runtime" >&2
+    exit 1
+  fi
+  echo "↓ creating whisper venv and installing openai-whisper (pulls PyTorch) …"
+  python3 -m venv "${venv}"
+  "${venv}/bin/python" -m pip install --quiet --upgrade pip
+  "${venv}/bin/python" -m pip install --quiet openai-whisper
+  echo "✓ whisper venv ready"
+}
+
 # --- Run --------------------------------------------------------------------
 echo "SubtitleFlow — fetching bundled resources into resources/"
 fetch "${FFMPEG_URL}" "${FFMPEG_OUT}" "${FFMPEG_SHA256}" "755"
 fetch "${MODEL_URL}"  "${MODEL_OUT}"  "${MODEL_SHA256}"  "644"
 fetch "${FONT_URL}"   "${FONT_OUT}"   "${FONT_SHA256}"   "644"
+chmod 755 "${WHISPER_DIR}/whisper"
+provision_whisper
 echo "Done. Resources are ready under resources/."

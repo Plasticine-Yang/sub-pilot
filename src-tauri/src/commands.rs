@@ -399,7 +399,7 @@ pub fn project_location(app: AppHandle, project_id: String) -> Result<ProjectLoc
 /// Serializable transcription event tagged for the frontend. `project_id`
 /// lets the UI correlate events to the active project.
 #[derive(Debug, Clone, Serialize)]
-#[serde(tag = "kind", rename_all = "camelCase")]
+#[serde(tag = "kind", rename_all = "camelCase", rename_all_fields = "camelCase")]
 enum EmitPayload {
     Status {
         project_id: String,
@@ -430,7 +430,7 @@ impl EmitPayload {
 
 /// Serializable burn-in export event tagged for the frontend.
 #[derive(Debug, Clone, Serialize)]
-#[serde(tag = "kind", rename_all = "camelCase")]
+#[serde(tag = "kind", rename_all = "camelCase", rename_all_fields = "camelCase")]
 enum ExportPayload {
     Progress { project_id: String, fraction: f32 },
     Done { project_id: String, path: String },
@@ -439,7 +439,7 @@ enum ExportPayload {
 
 /// Serializable model-download event tagged for the frontend.
 #[derive(Debug, Clone, Serialize)]
-#[serde(tag = "kind", rename_all = "camelCase")]
+#[serde(tag = "kind", rename_all = "camelCase", rename_all_fields = "camelCase")]
 enum ModelDownloadPayload {
     Progress {
         model: models::ModelId,
@@ -519,4 +519,58 @@ fn app_data_dir(app: &AppHandle) -> Result<PathBuf, String> {
 
 fn project_dir(app: &AppHandle, id: &str) -> Result<PathBuf, String> {
     Ok(projects_root(app)?.join(id))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::Value;
+
+    // These lock the event payload's JSON keys to what the frontend reads
+    // (src/lib/api.ts: `projectId`, `etaMs`). The enum-level `rename_all`
+    // renames only the variant tag, NOT struct-variant fields — so without
+    // `rename_all_fields` the backend emitted `project_id`/`eta_ms`, the UI's
+    // `event.projectId` was undefined, every event was dropped by the id guard,
+    // and transcription froze at "转写中 0%". Guards that regression.
+
+    #[test]
+    fn transcription_progress_uses_camelcase_keys_the_ui_reads() {
+        let payload = EmitPayload::new(
+            "p1",
+            TranscriptionEvent::Progress(crate::transcribe::TranscriptionProgress {
+                fraction: 0.5,
+                eta_ms: Some(1000),
+            }),
+        );
+        let v: Value = serde_json::to_value(&payload).unwrap();
+        assert_eq!(v["kind"], "progress");
+        assert_eq!(v["projectId"], "p1", "UI reads event.projectId; got {v}");
+        assert_eq!(v["etaMs"], 1000, "UI reads event.etaMs; got {v}");
+        assert!(v.get("project_id").is_none(), "stale snake_case key: {v}");
+        assert!(v.get("eta_ms").is_none(), "stale snake_case key: {v}");
+    }
+
+    #[test]
+    fn transcription_status_uses_camelcase_keys_the_ui_reads() {
+        let payload = EmitPayload::new(
+            "p1",
+            TranscriptionEvent::StatusChanged(ProjectStatus::Transcribed),
+        );
+        let v: Value = serde_json::to_value(&payload).unwrap();
+        assert_eq!(v["kind"], "status");
+        assert_eq!(v["projectId"], "p1", "UI reads event.projectId; got {v}");
+        assert_eq!(v["status"], "transcribed");
+        assert!(v.get("project_id").is_none(), "stale snake_case key: {v}");
+    }
+
+    #[test]
+    fn export_progress_uses_camelcase_keys_the_ui_reads() {
+        let payload = ExportPayload::Progress {
+            project_id: "p1".to_string(),
+            fraction: 0.25,
+        };
+        let v: Value = serde_json::to_value(&payload).unwrap();
+        assert_eq!(v["projectId"], "p1", "UI reads event.projectId; got {v}");
+        assert!(v.get("project_id").is_none(), "stale snake_case key: {v}");
+    }
 }

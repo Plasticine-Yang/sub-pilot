@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+#
+# Dev launcher for the transcription engine (ADR-0005).
+#
+# The Rust backend spawns `resources/whisper/whisper <audio> --model <m>
+# --model_dir <dir> --output_format srt --verbose True --output_dir <dir>`
+# (see src-tauri/src/whisper.rs). ADR-0005 calls for a Python whisper runtime
+# bundled with the app; that packaging is deferred. Until then this shim
+# forwards the exact same arguments to a locally-installed OpenAI whisper CLI,
+# so `npm run tauri dev` transcribes for real.
+#
+# Resolution order (first match wins), skipping this shim itself:
+#   co-located venv (resources/whisper/venv), $WHISPER_BIN,
+#   <python user-base>/bin/whisper, ~/.local/bin/whisper,
+#   /opt/homebrew/bin/whisper, /usr/local/bin/whisper.
+
+set -euo pipefail
+
+here="$(cd "$(dirname "$0")" && pwd)"
+self="$here/$(basename "$0")"
+user_base="$(python3 -m site --user-base 2>/dev/null || true)"
+
+for candidate in \
+  "$here/venv/bin/whisper" \
+  "${WHISPER_BIN:-}" \
+  ${user_base:+"$user_base/bin/whisper"} \
+  "$HOME/.local/bin/whisper" \
+  "/opt/homebrew/bin/whisper" \
+  "/usr/local/bin/whisper"; do
+  [ -n "$candidate" ] || continue
+  if [ -x "$candidate" ] && [ "$candidate" != "$self" ]; then
+    exec "$candidate" "$@"
+  fi
+done
+
+echo "whisper 运行时未找到：请先运行 scripts/setup-resources.sh（ADR-0005 的随包运行时尚未落地）" >&2
+exit 127
