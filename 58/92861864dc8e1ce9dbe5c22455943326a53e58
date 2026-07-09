@@ -1,0 +1,415 @@
+README.md
+  s_46a5ab4cdb7715::t_f894e34c26bca5 36 gitai:{"mixed_line_ranges":[],"operations":[{"operation_id":"6a5003c463a01e2af9101e43","tool_type":"agent","tool_id":"Edit","line_ranges":[{"Single":36}]}]}
+  s_46a5ab4cdb7715::t_f61978a1c9100b 9-21 gitai:{"mixed_line_ranges":[],"operations":[{"operation_id":"6a5003ad63a01e2af9101e37","tool_type":"agent","tool_id":"Edit","line_ranges":[{"Range":[9,21]}]}]}
+  s_46a5ab4cdb7715::t_d57ba0223c6a05 53-69 gitai:{"mixed_line_ranges":[],"operations":[{"operation_id":"6a5003ce63a01e2af9101e46","tool_type":"agent","tool_id":"Edit","line_ranges":[{"Range":[53,69]}]}]}
+.scratch/release-cicd/issues/01-bundle-whisper-runtime.md
+  s_46a5ab4cdb7715::t_c7124b3f4ac832 1-33 gitai:{"mixed_line_ranges":[],"operations":[{"operation_id":"6a50036163a01e2af9101e16","tool_type":"agent","tool_id":"Write","line_ranges":[{"Range":[1,33]}]}]}
+.github/workflows/release.yml
+  s_46a5ab4cdb7715::t_d1c436c0faa279 1-91,93-103 gitai:{"mixed_line_ranges":[],"operations":[{"operation_id":"6a5002f763a01e2af9101de9","tool_type":"agent","tool_id":"Write","line_ranges":[{"Range":[1,91]},{"Range":[93,103]}]}]}
+  s_46a5ab4cdb7715::t_cec58aaa4cb321 92 gitai:{"mixed_line_ranges":[],"operations":[{"operation_id":"6a50033063a01e2af9101df5","tool_type":"agent","tool_id":"Edit","line_ranges":[{"Single":92}]}]}
+.scratch/release-cicd/issues/03-code-signing-and-notarization.md
+  s_46a5ab4cdb7715::t_eeabe503225139 1-30 gitai:{"mixed_line_ranges":[],"operations":[{"operation_id":"6a50039363a01e2af9101e25","tool_type":"agent","tool_id":"Write","line_ranges":[{"Range":[1,30]}]}]}
+scripts/setup-resources.sh
+  s_46a5ab4cdb7715::t_501455e87801b6 16,62-82,144 gitai:{"mixed_line_ranges":[],"operations":[{"operation_id":"6a50024e63a01e2af9101da4","tool_type":"agent","tool_id":"Edit","line_ranges":[{"Single":16},{"Range":[62,82]},{"Single":144}]}]}
+  s_46a5ab4cdb7715::t_8b3cc02a9c79d4 17-19
+  s_46a5ab4cdb7715::t_d2f50f60b2c9cb 60-61
+  s_46a5ab4cdb7715::t_d8ca05411c01dc 83-85
+  s_46a5ab4cdb7715::t_76d8bf0b175611 145-147
+.scratch/release-cicd/issues/02-windows-linux-resource-adaptation.md
+  s_46a5ab4cdb7715::t_9f7e317fe3bf8e 1-31 gitai:{"mixed_line_ranges":[],"operations":[{"operation_id":"6a50037b63a01e2af9101e1f","tool_type":"agent","tool_id":"Write","line_ranges":[{"Range":[1,31]}]}]}
+.github/workflows/ci.yml
+  s_46a5ab4cdb7715::t_9e8484448c2308 1-68 gitai:{"mixed_line_ranges":[],"operations":[{"operation_id":"6a50029863a01e2af9101db9","tool_type":"agent","tool_id":"Write","line_ranges":[{"Range":[1,68]}]}]}
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "5892861864dc8e1ce9dbe5c22455943326a53e58",
+  "prompts": {},
+  "sessions": {
+    "s_46a5ab4cdb7715": {
+      "agent_id": {
+        "tool": "trae",
+        "id": "6a4fee2363a01e2af9101ac3",
+        "model": "openrouter-3o__max"
+      },
+      "human_author": "yangwenfeng.0719 <yangwenfeng.0719@bytedance.com>"
+    }
+  },
+  "attestation_metadata": {
+    ".github/workflows/ci.yml": [
+      {
+        "hash": "s_46a5ab4cdb7715::t_9e8484448c2308",
+        "line_ranges": [
+          {
+            "Range": [
+              1,
+              68
+            ]
+          }
+        ],
+        "mixed_line_ranges": [],
+        "operations": [
+          {
+            "operation_id": "6a50029863a01e2af9101db9",
+            "tool_type": "agent",
+            "tool_id": "Write",
+            "line_ranges": [
+              {
+                "Range": [
+                  1,
+                  68
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    ".github/workflows/release.yml": [
+      {
+        "hash": "s_46a5ab4cdb7715::t_d1c436c0faa279",
+        "line_ranges": [
+          {
+            "Range": [
+              1,
+              91
+            ]
+          },
+          {
+            "Range": [
+              93,
+              103
+            ]
+          }
+        ],
+        "mixed_line_ranges": [],
+        "operations": [
+          {
+            "operation_id": "6a5002f763a01e2af9101de9",
+            "tool_type": "agent",
+            "tool_id": "Write",
+            "line_ranges": [
+              {
+                "Range": [
+                  1,
+                  91
+                ]
+              },
+              {
+                "Range": [
+                  93,
+                  103
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "hash": "s_46a5ab4cdb7715::t_cec58aaa4cb321",
+        "line_ranges": [
+          {
+            "Single": 92
+          }
+        ],
+        "mixed_line_ranges": [],
+        "operations": [
+          {
+            "operation_id": "6a50033063a01e2af9101df5",
+            "tool_type": "agent",
+            "tool_id": "Edit",
+            "line_ranges": [
+              {
+                "Single": 92
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    ".scratch/release-cicd/issues/01-bundle-whisper-runtime.md": [
+      {
+        "hash": "s_46a5ab4cdb7715::t_c7124b3f4ac832",
+        "line_ranges": [
+          {
+            "Range": [
+              1,
+              33
+            ]
+          }
+        ],
+        "mixed_line_ranges": [],
+        "operations": [
+          {
+            "operation_id": "6a50036163a01e2af9101e16",
+            "tool_type": "agent",
+            "tool_id": "Write",
+            "line_ranges": [
+              {
+                "Range": [
+                  1,
+                  33
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    ".scratch/release-cicd/issues/02-windows-linux-resource-adaptation.md": [
+      {
+        "hash": "s_46a5ab4cdb7715::t_9f7e317fe3bf8e",
+        "line_ranges": [
+          {
+            "Range": [
+              1,
+              31
+            ]
+          }
+        ],
+        "mixed_line_ranges": [],
+        "operations": [
+          {
+            "operation_id": "6a50037b63a01e2af9101e1f",
+            "tool_type": "agent",
+            "tool_id": "Write",
+            "line_ranges": [
+              {
+                "Range": [
+                  1,
+                  31
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    ".scratch/release-cicd/issues/03-code-signing-and-notarization.md": [
+      {
+        "hash": "s_46a5ab4cdb7715::t_eeabe503225139",
+        "line_ranges": [
+          {
+            "Range": [
+              1,
+              30
+            ]
+          }
+        ],
+        "mixed_line_ranges": [],
+        "operations": [
+          {
+            "operation_id": "6a50039363a01e2af9101e25",
+            "tool_type": "agent",
+            "tool_id": "Write",
+            "line_ranges": [
+              {
+                "Range": [
+                  1,
+                  30
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "README.md": [
+      {
+        "hash": "s_46a5ab4cdb7715::t_f894e34c26bca5",
+        "line_ranges": [
+          {
+            "Single": 36
+          }
+        ],
+        "mixed_line_ranges": [],
+        "operations": [
+          {
+            "operation_id": "6a5003c463a01e2af9101e43",
+            "tool_type": "agent",
+            "tool_id": "Edit",
+            "line_ranges": [
+              {
+                "Single": 36
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "hash": "s_46a5ab4cdb7715::t_f61978a1c9100b",
+        "line_ranges": [
+          {
+            "Range": [
+              9,
+              21
+            ]
+          }
+        ],
+        "mixed_line_ranges": [],
+        "operations": [
+          {
+            "operation_id": "6a5003ad63a01e2af9101e37",
+            "tool_type": "agent",
+            "tool_id": "Edit",
+            "line_ranges": [
+              {
+                "Range": [
+                  9,
+                  21
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "hash": "s_46a5ab4cdb7715::t_d57ba0223c6a05",
+        "line_ranges": [
+          {
+            "Range": [
+              53,
+              69
+            ]
+          }
+        ],
+        "mixed_line_ranges": [],
+        "operations": [
+          {
+            "operation_id": "6a5003ce63a01e2af9101e46",
+            "tool_type": "agent",
+            "tool_id": "Edit",
+            "line_ranges": [
+              {
+                "Range": [
+                  53,
+                  69
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "scripts/setup-resources.sh": [
+      {
+        "hash": "s_46a5ab4cdb7715::t_501455e87801b6",
+        "line_ranges": [
+          {
+            "Single": 16
+          },
+          {
+            "Range": [
+              62,
+              82
+            ]
+          },
+          {
+            "Single": 144
+          }
+        ],
+        "mixed_line_ranges": [],
+        "operations": [
+          {
+            "operation_id": "6a50024e63a01e2af9101da4",
+            "tool_type": "agent",
+            "tool_id": "Edit",
+            "line_ranges": [
+              {
+                "Single": 16
+              },
+              {
+                "Range": [
+                  62,
+                  82
+                ]
+              },
+              {
+                "Single": 144
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "remote_transcripts": {
+    "s_46a5ab4cdb7715": {
+      "tool": "trae",
+      "conversation_id": "6a4fee2363a01e2af9101ac3",
+      "session_id": "6a4fee2363a01e2af9101ac3",
+      "status": "remote_only",
+      "message": "Remote transcript resolution is not implemented yet for TRAE prompts."
+    },
+    "s_46a5ab4cdb7715::t_501455e87801b6": {
+      "tool": "trae",
+      "conversation_id": "6a4fee2363a01e2af9101ac3",
+      "session_id": "6a4fee2363a01e2af9101ac3",
+      "status": "remote_only",
+      "message": "Remote transcript resolution is not implemented yet for TRAE prompts."
+    },
+    "s_46a5ab4cdb7715::t_9e8484448c2308": {
+      "tool": "trae",
+      "conversation_id": "6a4fee2363a01e2af9101ac3",
+      "session_id": "6a4fee2363a01e2af9101ac3",
+      "status": "remote_only",
+      "message": "Remote transcript resolution is not implemented yet for TRAE prompts."
+    },
+    "s_46a5ab4cdb7715::t_9f7e317fe3bf8e": {
+      "tool": "trae",
+      "conversation_id": "6a4fee2363a01e2af9101ac3",
+      "session_id": "6a4fee2363a01e2af9101ac3",
+      "status": "remote_only",
+      "message": "Remote transcript resolution is not implemented yet for TRAE prompts."
+    },
+    "s_46a5ab4cdb7715::t_c7124b3f4ac832": {
+      "tool": "trae",
+      "conversation_id": "6a4fee2363a01e2af9101ac3",
+      "session_id": "6a4fee2363a01e2af9101ac3",
+      "status": "remote_only",
+      "message": "Remote transcript resolution is not implemented yet for TRAE prompts."
+    },
+    "s_46a5ab4cdb7715::t_cec58aaa4cb321": {
+      "tool": "trae",
+      "conversation_id": "6a4fee2363a01e2af9101ac3",
+      "session_id": "6a4fee2363a01e2af9101ac3",
+      "status": "remote_only",
+      "message": "Remote transcript resolution is not implemented yet for TRAE prompts."
+    },
+    "s_46a5ab4cdb7715::t_d1c436c0faa279": {
+      "tool": "trae",
+      "conversation_id": "6a4fee2363a01e2af9101ac3",
+      "session_id": "6a4fee2363a01e2af9101ac3",
+      "status": "remote_only",
+      "message": "Remote transcript resolution is not implemented yet for TRAE prompts."
+    },
+    "s_46a5ab4cdb7715::t_d57ba0223c6a05": {
+      "tool": "trae",
+      "conversation_id": "6a4fee2363a01e2af9101ac3",
+      "session_id": "6a4fee2363a01e2af9101ac3",
+      "status": "remote_only",
+      "message": "Remote transcript resolution is not implemented yet for TRAE prompts."
+    },
+    "s_46a5ab4cdb7715::t_eeabe503225139": {
+      "tool": "trae",
+      "conversation_id": "6a4fee2363a01e2af9101ac3",
+      "session_id": "6a4fee2363a01e2af9101ac3",
+      "status": "remote_only",
+      "message": "Remote transcript resolution is not implemented yet for TRAE prompts."
+    },
+    "s_46a5ab4cdb7715::t_f61978a1c9100b": {
+      "tool": "trae",
+      "conversation_id": "6a4fee2363a01e2af9101ac3",
+      "session_id": "6a4fee2363a01e2af9101ac3",
+      "status": "remote_only",
+      "message": "Remote transcript resolution is not implemented yet for TRAE prompts."
+    },
+    "s_46a5ab4cdb7715::t_f894e34c26bca5": {
+      "tool": "trae",
+      "conversation_id": "6a4fee2363a01e2af9101ac3",
+      "session_id": "6a4fee2363a01e2af9101ac3",
+      "status": "remote_only",
+      "message": "Remote transcript resolution is not implemented yet for TRAE prompts."
+    }
+  }
+}
