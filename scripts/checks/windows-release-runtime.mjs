@@ -37,7 +37,7 @@ const setupResources = read("scripts/setup-resources.sh");
 if (!setupResources.includes("BUNDLE_WHISPER_RUNTIME")) {
   fail("scripts/setup-resources.sh must expose BUNDLE_WHISPER_RUNTIME");
 }
-if (!setupResources.includes('cp "${FFMPEG_OUT}" "${FFMPEG_DIR}/ffmpeg"')) {
+if (!setupResources.includes("shutil.copyfile(sys.argv[1], sys.argv[2])")) {
   fail("scripts/setup-resources.sh must keep a Windows ffmpeg compatibility copy for base tauri.conf.json");
 }
 if (!setupResources.includes("pyinstaller")) {

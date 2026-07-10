@@ -266,7 +266,13 @@ build_windows_whisper_runtime() {
 echo "SubtitleFlow — fetching bundled resources into resources/ (platform: ${PLATFORM})"
 fetch "${FFMPEG_URL}" "${FFMPEG_OUT}" "${FFMPEG_SHA256}" "755"
 if [[ "${PLATFORM}" == "win32-x64" ]]; then
-  cp "${FFMPEG_OUT}" "${FFMPEG_DIR}/ffmpeg"
+  python="$(python_cmd)"
+  "${python}" - "${FFMPEG_OUT}" "${FFMPEG_DIR}/ffmpeg" <<'PY'
+import shutil
+import sys
+
+shutil.copyfile(sys.argv[1], sys.argv[2])
+PY
   chmod 755 "${FFMPEG_DIR}/ffmpeg"
 fi
 fetch "${MODEL_URL}"  "${MODEL_OUT}"  "${MODEL_SHA256}"  "644"
