@@ -8,7 +8,7 @@
 use crate::subtitle::parse_srt;
 use crate::subtitle::SubtitleCue;
 use crate::transcribe::Transcriber;
-use std::io::{BufRead, BufReader};
+use std::io::{BufRead, BufReader, Read};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
@@ -23,11 +23,7 @@ pub struct WhisperTranscriber {
 }
 
 impl WhisperTranscriber {
-    pub fn new(
-        whisper: PathBuf,
-        bundled_model_dir: PathBuf,
-        downloads_model_dir: PathBuf,
-    ) -> Self {
+    pub fn new(whisper: PathBuf, bundled_model_dir: PathBuf, downloads_model_dir: PathBuf) -> Self {
         Self {
             whisper,
             bundled_model_dir,
@@ -56,9 +52,11 @@ impl Transcriber for WhisperTranscriber {
         total_duration_ms: u64,
         on_progress: &mut dyn FnMut(f32),
     ) -> Result<Vec<SubtitleCue>, String> {
-        let out_dir = audio
+        let audio_dir = audio
             .parent()
             .ok_or_else(|| "音频路径缺少上级目录".to_string())?;
+        let out_dir = audio_dir.join("whisper-output");
+        reset_output_dir(&out_dir)?;
 
         let mut child = Command::new(&self.whisper)
             .arg(audio)
@@ -67,13 +65,22 @@ impl Transcriber for WhisperTranscriber {
             .arg(self.model_dir_for(model))
             .args(["--output_format", "srt", "--verbose", "True"])
             .arg("--output_dir")
-            .arg(out_dir)
+            .arg(&out_dir)
             .env("PYTHONUTF8", "1")
             .env("PYTHONIOENCODING", "utf-8")
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .spawn()
             .map_err(|e| format!("无法启动 whisper：{e}"))?;
+
+        let stderr = child.stderr.take().map(|stderr| {
+            std::thread::spawn(move || {
+                let mut buf = String::new();
+                let mut reader = BufReader::new(stderr);
+                let _ = reader.read_to_string(&mut buf);
+                buf
+            })
+        });
 
         if let Some(stdout) = child.stdout.take() {
             let reader = BufReader::new(stdout);
@@ -87,19 +94,109 @@ impl Transcriber for WhisperTranscriber {
         let status = child
             .wait()
             .map_err(|e| format!("等待 whisper 进程失败：{e}"))?;
+        let stderr = stderr
+            .and_then(|handle| handle.join().ok())
+            .unwrap_or_default();
         if !status.success() {
-            return Err(format!("whisper 转写失败（退出码 {:?}）", status.code()));
+            let detail = stderr.trim();
+            if detail.is_empty() {
+                return Err(format!("whisper 转写失败（退出码 {:?}）", status.code()));
+            }
+            return Err(format!(
+                "whisper 转写失败（退出码 {:?}）：{detail}",
+                status.code()
+            ));
         }
         on_progress(1.0);
 
-        // whisper writes "<audio stem>.srt" into out_dir.
-        let stem = audio
-            .file_stem()
-            .ok_or_else(|| "音频路径缺少文件名".to_string())?;
-        let srt_path = out_dir.join(format!("{}.srt", stem.to_string_lossy()));
+        let srt_path =
+            whisper_output_srt_path(audio, &out_dir).map_err(|e| with_stderr(e, &stderr))?;
         let srt = std::fs::read_to_string(&srt_path)
-            .map_err(|e| format!("读取 whisper 输出 SRT 失败：{e}"))?;
-        parse_srt(&srt).map_err(|e| format!("解析 whisper 输出 SRT 失败：{e:?}"))
+            .map_err(|e| with_stderr(format!("读取 whisper 输出 SRT 失败：{e}"), &stderr))?;
+        let cues = parse_srt(&srt).map_err(|e| format!("解析 whisper 输出 SRT 失败：{e:?}"))?;
+        let _ = std::fs::remove_dir_all(&out_dir);
+        Ok(cues)
+    }
+}
+
+fn reset_output_dir(out_dir: &Path) -> Result<(), String> {
+    if out_dir.is_dir() {
+        std::fs::remove_dir_all(out_dir).map_err(|e| format!("清理 whisper 输出目录失败：{e}"))?;
+    } else if out_dir.exists() {
+        std::fs::remove_file(out_dir).map_err(|e| format!("清理 whisper 输出文件失败：{e}"))?;
+    }
+    std::fs::create_dir_all(out_dir).map_err(|e| format!("创建 whisper 输出目录失败：{e}"))
+}
+
+fn whisper_output_srt_path(audio: &Path, out_dir: &Path) -> Result<PathBuf, String> {
+    // OpenAI Whisper normally writes "<audio stem>.srt". Some bundled runtimes
+    // may choose a different basename, so fall back to the sole SRT in the
+    // fresh output directory before giving up.
+    let stem = audio
+        .file_stem()
+        .ok_or_else(|| "音频路径缺少文件名".to_string())?;
+    let expected = out_dir.join(format!("{}.srt", stem.to_string_lossy()));
+    if expected.is_file() {
+        return Ok(expected);
+    }
+
+    let mut candidates = Vec::new();
+    for entry in
+        std::fs::read_dir(out_dir).map_err(|e| format!("读取 whisper 输出目录失败：{e}"))?
+    {
+        let path = entry
+            .map_err(|e| format!("读取 whisper 输出目录项失败：{e}"))?
+            .path();
+        let is_srt = path
+            .extension()
+            .and_then(|ext| ext.to_str())
+            .is_some_and(|ext| ext.eq_ignore_ascii_case("srt"));
+        if path.is_file() && is_srt {
+            candidates.push(path);
+        }
+    }
+    candidates.sort();
+
+    match candidates.as_slice() {
+        [path] => Ok(path.clone()),
+        [] => Err(format!(
+            "读取 whisper 输出 SRT 失败：找不到 SRT 文件（预期路径：{}；目录内容：{}）",
+            expected.display(),
+            describe_dir(out_dir)
+        )),
+        _ => Err(format!(
+            "读取 whisper 输出 SRT 失败：找到多个 SRT 文件，无法判断使用哪一个：{}",
+            candidates
+                .iter()
+                .map(|path| path.display().to_string())
+                .collect::<Vec<_>>()
+                .join(", ")
+        )),
+    }
+}
+
+fn describe_dir(dir: &Path) -> String {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return "<无法读取目录>".to_string();
+    };
+    let mut names = Vec::new();
+    for entry in entries.flatten() {
+        names.push(entry.file_name().to_string_lossy().to_string());
+    }
+    names.sort();
+    if names.is_empty() {
+        "<空目录>".to_string()
+    } else {
+        names.join(", ")
+    }
+}
+
+fn with_stderr(message: String, stderr: &str) -> String {
+    let detail = stderr.trim();
+    if detail.is_empty() {
+        message
+    } else {
+        format!("{message}；whisper stderr：{detail}")
     }
 }
 
@@ -162,8 +259,8 @@ mod tests {
             fixture.is_file(),
             "fixture wav missing at {fixture:?}; extract one with ffmpeg -i demo.mp4 -vn -ac 1 -ar 16000"
         );
-        // whisper writes its SRT next to the audio; copy into a tempdir so the
-        // test stays hermetic and never dirties the tracked resources/ tree.
+        // Copy into a tempdir so the test stays hermetic and never dirties the
+        // tracked resources/ tree.
         let work = tempfile::tempdir().unwrap();
         let audio = work.path().join("fixture_audio.wav");
         std::fs::copy(&fixture, &audio).unwrap();
@@ -185,6 +282,53 @@ mod tests {
             "expected a mid-run progress fraction in (0,1) (the 0% freeze symptom), got {fractions:?}"
         );
         assert!(!cues.is_empty(), "expected at least one cue");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn transcribe_accepts_srt_written_under_unexpected_runtime_name() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let work = tempfile::tempdir().unwrap();
+        let audio = work.path().join("audio.wav");
+        std::fs::write(&audio, b"fake wav").unwrap();
+
+        let fake_whisper = work.path().join("fake-whisper");
+        std::fs::write(
+            &fake_whisper,
+            r#"#!/usr/bin/env bash
+set -euo pipefail
+out_dir=""
+while (($#)); do
+  if [[ "$1" == "--output_dir" ]]; then
+    shift
+    out_dir="$1"
+    break
+  fi
+  shift
+done
+mkdir -p "$out_dir"
+cat > "$out_dir/windows-runtime-output.srt" <<'SRT'
+1
+00:00:00,000 --> 00:00:01,000
+hello from fake whisper
+
+SRT
+"#,
+        )
+        .unwrap();
+        let mut perms = std::fs::metadata(&fake_whisper).unwrap().permissions();
+        perms.set_mode(0o755);
+        std::fs::set_permissions(&fake_whisper, perms).unwrap();
+
+        let transcriber =
+            WhisperTranscriber::new(fake_whisper, work.path().into(), work.path().into());
+        let cues = transcriber
+            .transcribe(&audio, "base", 1_000, &mut |_| {})
+            .expect("should read the SRT actually produced by the runtime");
+
+        assert_eq!(cues.len(), 1);
+        assert_eq!(cues[0].text, "hello from fake whisper");
     }
 
     #[test]
