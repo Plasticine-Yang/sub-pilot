@@ -265,6 +265,10 @@ build_windows_whisper_runtime() {
 # --- Run --------------------------------------------------------------------
 echo "SubtitleFlow — fetching bundled resources into resources/ (platform: ${PLATFORM})"
 fetch "${FFMPEG_URL}" "${FFMPEG_OUT}" "${FFMPEG_SHA256}" "755"
+if [[ "${PLATFORM}" == "win32-x64" ]]; then
+  cp "${FFMPEG_OUT}" "${FFMPEG_DIR}/ffmpeg"
+  chmod 755 "${FFMPEG_DIR}/ffmpeg"
+fi
 fetch "${MODEL_URL}"  "${MODEL_OUT}"  "${MODEL_SHA256}"  "644"
 fetch "${FONT_URL}"   "${FONT_OUT}"   "${FONT_SHA256}"   "644"
 if [[ "${PLATFORM}" == "win32-x64" ]]; then
