@@ -257,7 +257,7 @@ build_windows_whisper_runtime() {
     echo "✗ PyInstaller did not create ${WHISPER_WINDOWS_EXE}" >&2
     exit 1
   fi
-  "${WHISPER_WINDOWS_EXE}" --help >/dev/null
+  PYTHONUTF8=1 PYTHONIOENCODING=utf-8 "${WHISPER_WINDOWS_EXE}" --help >/dev/null
   rm -rf "${build_venv}" "${pyinstaller_work}"
   echo "✓ Windows whisper runtime ready at ${WHISPER_WINDOWS_APP_DIR}"
 }

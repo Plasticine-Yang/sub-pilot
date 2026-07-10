@@ -68,6 +68,8 @@ impl Transcriber for WhisperTranscriber {
             .args(["--output_format", "srt", "--verbose", "True"])
             .arg("--output_dir")
             .arg(out_dir)
+            .env("PYTHONUTF8", "1")
+            .env("PYTHONIOENCODING", "utf-8")
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .spawn()
