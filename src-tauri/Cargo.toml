@@ -1,6 +1,6 @@
 [package]
 name = "subtitleflow"
-version = "0.1.2"
+version = "0.1.3"
 description = "SubtitleFlow — 完全本地运行的 AI 视频字幕工具"
 authors = ["SubtitleFlow"]
 edition = "2021"
