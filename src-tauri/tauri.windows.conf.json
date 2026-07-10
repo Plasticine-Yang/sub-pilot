@@ -1,0 +1,10 @@
+{
+  "bundle": {
+    "resources": {
+      "../resources/ffmpeg/ffmpeg.exe": "resources/ffmpeg/ffmpeg.exe",
+      "../resources/models/base.pt": "resources/models/base.pt",
+      "../resources/fonts/NotoSansCJKsc-Regular.otf": "resources/fonts/NotoSansCJKsc-Regular.otf",
+      "../resources/whisper/windows/whisper": "resources/whisper/windows/whisper"
+    }
+  }
+}

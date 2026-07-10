@@ -17,7 +17,7 @@
 >
 > 代码签名与公证正在跟进（见 `.scratch/release-cicd/issues/03-code-signing-and-notarization.md`）。
 
-> **已知限制**：当前发布产物尚未内置 Whisper 运行时（Python + PyTorch，见 ADR-0005 延后打包），**转写功能暂不可用**；导入、界面与导出路径可正常使用。随包运行时跟进见 `.scratch/release-cicd/issues/01-bundle-whisper-runtime.md`。
+> **平台状态**：Windows 安装包已内置 Whisper 运行时（Python + PyTorch），安装后可直接本地转写；macOS/Linux 的 Whisper 随包运行时仍在跟进，当前主要用于导入、界面与导出路径验证。
 
 ## 技术栈
 
@@ -41,7 +41,7 @@ npm install
 npm run tauri dev
 ```
 
-首次启动时应用会自检 `resources/ffmpeg/ffmpeg` 可执行、`resources/models/base.pt` 存在、`resources/whisper/whisper` 可执行；缺失时首页会给出明确提示。
+首次启动时应用会自检 `resources/ffmpeg/ffmpeg` 可执行、`resources/models/base.pt` 存在，并单独检查 Whisper 运行时。Windows 安装包应当自带运行时并可直接转写；缺失时首页会给出明确提示。
 
 ## 常用脚本
 
@@ -66,4 +66,4 @@ git push origin v0.1.0
 
 workflow 跑完后，到 GitHub Releases 页面检查产物与发布说明，确认无误再手动 **Publish** 草稿。
 
-> 产物目前**未签名**、且**未内置 Whisper 运行时**（转写不可用）。三项后续工作（whisper 随包、Windows/Linux 资源适配、代码签名/公证）见 `.scratch/release-cicd/issues/`。
+> 产物目前**未签名**。Windows 安装包已内置 Whisper 运行时；macOS/Linux 的随包运行时、剩余平台资源适配、代码签名/公证仍见 `.scratch/release-cicd/issues/`。

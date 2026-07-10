@@ -1,6 +1,6 @@
 [package]
 name = "subtitleflow"
-version = "0.1.0"
+version = "0.1.1"
 description = "SubtitleFlow — 完全本地运行的 AI 视频字幕工具"
 authors = ["SubtitleFlow"]
 edition = "2021"
@@ -29,4 +29,3 @@ reqwest = { version = "0.12", default-features = false, features = ["blocking", 
 
 [dev-dependencies]
 tempfile = "3"
-

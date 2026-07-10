@@ -2,6 +2,10 @@
 
 Status: ready-for-human
 
+## Progress
+
+- 2026-07-11：Windows release 路径已改为在 CI 中用 PyInstaller 构建自包含 OpenAI Whisper runtime，并通过 `tauri.windows.conf.json` 随安装包打入 `resources/whisper/windows/whisper/`。macOS/Linux 的随包 runtime 仍待本 issue 后续覆盖。
+
 ## 背景
 
 ADR-0005 决定转写引擎用 OpenAI 官方原版 whisper（Python + PyTorch），并明确「把 Python 运行时随应用打包」，但该打包被延后（deferred）。当前状态：

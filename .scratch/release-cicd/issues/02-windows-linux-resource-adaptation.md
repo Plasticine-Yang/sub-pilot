@@ -2,6 +2,10 @@
 
 Status: ready-for-human
 
+## Progress
+
+- 2026-07-11：Windows release 路径已改为下载并打包 `resources/ffmpeg/ffmpeg.exe`，Rust 后端在 Windows 下也改为启动该 `.exe`。Linux 运行时验证仍待后续覆盖。
+
 ## 背景
 
 项目最初只面向 macOS（Apple Silicon）首发。为了让三平台 Release workflow 能构建通过，已做了最小适配，但 Windows/Linux 上的运行时行为尚未打通：

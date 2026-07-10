@@ -33,3 +33,5 @@ dist-ssr
 # Dev whisper runtime (venv) — provisioned locally, never committed. The
 # launcher script itself is tracked; the venv it resolves to is not.
 /resources/whisper/venv/
+/resources/whisper/build-venv/
+/resources/whisper/windows/

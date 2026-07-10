@@ -11,9 +11,8 @@ name: Release
 # will warn on first launch; see README "下载与安装" for the workaround. Signing +
 # notarization is tracked as a separate ticket.
 #
-# KNOWN LIMITATION: the shipped app cannot transcribe yet — the Whisper runtime
-# (Python + PyTorch) is not bundled (ADR-0005 deferred it). Import/UI/export
-# paths work; transcription needs the deferred whisper-packaging ticket.
+# Windows builds bundle a self-contained Whisper runtime so transcription works
+# after installation. macOS/Linux runtime bundling is still tracked separately.
 
 on:
   push:
@@ -77,14 +76,20 @@ jobs:
       - name: Install frontend dependencies
         run: npm ci
 
-      # `tauri-build` validates the bundle resource paths (ffmpeg/model/font) at
-      # compile time, so fetch them before the build. Pick the arch matching this
-      # matrix leg; skip the dev-only whisper venv. `bash` runs the script on
-      # Windows too (Git Bash ships on the windows-latest runner).
+      - name: Setup Python for bundled Whisper runtime (Windows only)
+        if: matrix.platform == 'windows-latest'
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      # `tauri-build` validates bundle resource paths at compile time, so fetch
+      # them before the build. The Windows leg also builds a self-contained
+      # PyInstaller Whisper runtime that tauri.windows.conf.json bundles.
       - name: Fetch bundle resources
         shell: bash
         env:
-          SKIP_WHISPER_VENV: "1"
+          SKIP_WHISPER_VENV: ${{ matrix.platform == 'windows-latest' && '0' || '1' }}
+          BUNDLE_WHISPER_RUNTIME: ${{ matrix.platform == 'windows-latest' && '1' || '0' }}
           FFMPEG_PLATFORM: ${{ matrix.ffmpeg_platform }}
         run: ./scripts/setup-resources.sh
 
@@ -97,7 +102,7 @@ jobs:
           releaseName: "SubtitleFlow ${{ github.ref_name }}"
           releaseBody: |
             未签名构建：macOS 会被 Gatekeeper 拦、Windows 有 SmartScreen 警告，绕过方法见 README「下载与安装」。
-            已知限制：本版尚未内置 Whisper 运行时，转写功能不可用（ADR-0005 延后打包）。
+            Windows 安装包已内置 Whisper 运行时，安装后可直接本地转写；macOS/Linux 的 Whisper 随包运行时仍在后续跟进。
           releaseDraft: true
           prerelease: false
           args: ${{ matrix.args }}

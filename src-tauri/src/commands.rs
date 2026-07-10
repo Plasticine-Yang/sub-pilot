@@ -19,6 +19,21 @@ use tauri::{AppHandle, Emitter, Manager};
 /// Event channel the frontend subscribes to for transcription updates.
 pub const EVENT_TRANSCRIPTION: &str = "transcription://event";
 
+const WHISPER_UNAVAILABLE_MESSAGE: &str = "Whisper 运行时未随安装包正确部署，转写功能暂不可用。";
+
+#[cfg(windows)]
+const WHISPER_RESOURCES: &[&str] = &[
+    "resources/whisper/windows/whisper/whisper.exe",
+    "resources/whisper/venv/Scripts/whisper.exe",
+];
+#[cfg(not(windows))]
+const WHISPER_RESOURCES: &[&str] = &["resources/whisper/whisper"];
+
+#[cfg(windows)]
+const FFMPEG_RESOURCE: &str = "resources/ffmpeg/ffmpeg.exe";
+#[cfg(not(windows))]
+const FFMPEG_RESOURCE: &str = "resources/ffmpeg/ffmpeg";
+
 /// Liveness probe proving the frontend↔Rust bridge is wired up.
 #[tauri::command]
 pub fn ping() -> String {
@@ -486,7 +501,7 @@ fn resource_dir(app: &AppHandle) -> Result<PathBuf, String> {
 }
 
 fn ffmpeg_path(app: &AppHandle) -> Result<PathBuf, String> {
-    Ok(resource_dir(app)?.join("resources/ffmpeg/ffmpeg"))
+    Ok(resource_dir(app)?.join(FFMPEG_RESOURCE))
 }
 
 fn model_dir(app: &AppHandle) -> Result<PathBuf, String> {
@@ -504,7 +519,29 @@ fn fonts_dir(app: &AppHandle) -> Result<PathBuf, String> {
 }
 
 fn whisper_path(app: &AppHandle) -> Result<PathBuf, String> {
-    Ok(resource_dir(app)?.join("resources/whisper/whisper"))
+    let dir = resource_dir(app)?;
+    let path = WHISPER_RESOURCES
+        .iter()
+        .map(|rel| dir.join(rel))
+        .find(|candidate| candidate.is_file())
+        .ok_or_else(|| WHISPER_UNAVAILABLE_MESSAGE.to_string())?;
+    if !path.is_file() {
+        return Err(WHISPER_UNAVAILABLE_MESSAGE.to_string());
+    }
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let executable = path
+            .metadata()
+            .map(|m| m.permissions().mode() & 0o111 != 0)
+            .unwrap_or(false);
+        if !executable {
+            return Err("Whisper 运行时存在但不可执行，转写功能暂不可用。".to_string());
+        }
+    }
+
+    Ok(path)
 }
 
 fn projects_root(app: &AppHandle) -> Result<PathBuf, String> {

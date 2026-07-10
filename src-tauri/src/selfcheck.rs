@@ -16,6 +16,10 @@ pub enum ComponentState {
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct SelfCheckReport {
+    /// Whether the resources required to start the app are present.
+    ///
+    /// Whisper is reported separately so the frontend can gate transcription
+    /// while still distinguishing app-start resources from ASR runtime health.
     pub ok: bool,
     pub ffmpeg: ComponentState,
     pub model: ComponentState,
@@ -29,9 +33,7 @@ pub fn evaluate(
     model: ComponentState,
     whisper: ComponentState,
 ) -> SelfCheckReport {
-    let ok = ffmpeg == ComponentState::Ok
-        && model == ComponentState::Ok
-        && whisper == ComponentState::Ok;
+    let ok = ffmpeg == ComponentState::Ok && model == ComponentState::Ok;
     SelfCheckReport {
         ok,
         ffmpeg,
@@ -41,16 +43,26 @@ pub fn evaluate(
 }
 
 /// Relative paths of the bundled resources, mirroring `tauri.conf.json`.
+#[cfg(windows)]
+const FFMPEG_RESOURCE: &str = "resources/ffmpeg/ffmpeg.exe";
+#[cfg(not(windows))]
 const FFMPEG_RESOURCE: &str = "resources/ffmpeg/ffmpeg";
 const MODEL_RESOURCE: &str = "resources/models/base.pt";
-const WHISPER_RESOURCE: &str = "resources/whisper/whisper";
+
+#[cfg(windows)]
+const WHISPER_RESOURCES: &[&str] = &[
+    "resources/whisper/windows/whisper/whisper.exe",
+    "resources/whisper/venv/Scripts/whisper.exe",
+];
+#[cfg(not(windows))]
+const WHISPER_RESOURCES: &[&str] = &["resources/whisper/whisper"];
 
 /// Runs the first-launch self-check against the real bundled resources.
 pub fn run_self_check(app: &AppHandle) -> SelfCheckReport {
     let resource_dir = app.path().resource_dir().ok();
     let ffmpeg = probe_executable(resource_dir.as_deref(), FFMPEG_RESOURCE);
     let model = probe_file(resource_dir.as_deref(), MODEL_RESOURCE);
-    let whisper = probe_executable(resource_dir.as_deref(), WHISPER_RESOURCE);
+    let whisper = probe_any_executable(resource_dir.as_deref(), WHISPER_RESOURCES);
     evaluate(ffmpeg, model, whisper)
 }
 
@@ -73,6 +85,17 @@ fn probe_executable(resource_dir: Option<&Path>, rel: &str) -> ComponentState {
         ComponentState::Ok
     } else {
         ComponentState::NotExecutable
+    }
+}
+
+fn probe_any_executable(resource_dir: Option<&Path>, candidates: &[&str]) -> ComponentState {
+    if candidates
+        .iter()
+        .any(|rel| probe_executable(resource_dir, rel) == ComponentState::Ok)
+    {
+        ComponentState::Ok
+    } else {
+        ComponentState::Missing
     }
 }
 
@@ -104,7 +127,11 @@ mod tests {
 
     #[test]
     fn missing_ffmpeg_fails() {
-        let report = evaluate(ComponentState::Missing, ComponentState::Ok, ComponentState::Ok);
+        let report = evaluate(
+            ComponentState::Missing,
+            ComponentState::Ok,
+            ComponentState::Ok,
+        );
         assert!(!report.ok);
         assert_eq!(report.ffmpeg, ComponentState::Missing);
         assert_eq!(report.model, ComponentState::Ok);
@@ -123,15 +150,24 @@ mod tests {
 
     #[test]
     fn missing_model_fails() {
-        let report = evaluate(ComponentState::Ok, ComponentState::Missing, ComponentState::Ok);
+        let report = evaluate(
+            ComponentState::Ok,
+            ComponentState::Missing,
+            ComponentState::Ok,
+        );
         assert!(!report.ok);
         assert_eq!(report.model, ComponentState::Missing);
     }
 
     #[test]
-    fn missing_whisper_fails() {
-        let report = evaluate(ComponentState::Ok, ComponentState::Ok, ComponentState::Missing);
-        assert!(!report.ok);
+    fn missing_whisper_keeps_app_self_check_ok() {
+        let report = evaluate(
+            ComponentState::Ok,
+            ComponentState::Ok,
+            ComponentState::Missing,
+        );
+
+        assert!(report.ok);
         assert_eq!(report.whisper, ComponentState::Missing);
     }
 

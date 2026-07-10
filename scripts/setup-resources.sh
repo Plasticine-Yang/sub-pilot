@@ -4,9 +4,9 @@
 #   - ffmpeg  : static binary for the host platform -> resources/ffmpeg/ffmpeg[.exe]
 #   - base model : OpenAI Whisper "base" PyTorch model -> resources/models/base.pt
 #   - CJK font : Noto Sans CJK SC for burn-in         -> resources/fonts/NotoSansCJKsc-Regular.otf
-#   - whisper : OpenAI whisper CLI in a venv          -> resources/whisper/venv
-#     (the Rust backend spawns resources/whisper/whisper, which forwards to it;
-#      ADR-0005's fully-bundled Python runtime is deferred — this is the dev path)
+#   - whisper : dev venv or Windows bundled runtime
+#       dev path      -> resources/whisper/venv
+#       Windows bundle -> resources/whisper/windows/whisper/whisper.exe
 #
 # These artifacts are git-ignored (see .gitignore) because they are large
 # binaries. Run this script once after cloning so `npm run tauri dev` and the
@@ -15,10 +15,13 @@
 # Idempotent: files with a matching SHA-256 are left untouched.
 #
 # Environment toggles (used by CI):
-#   SKIP_WHISPER_VENV=1  skip provisioning the ~900MB whisper venv. The bundle
+#   SKIP_WHISPER_VENV=1  skip provisioning the ~900MB dev whisper venv. The bundle
 #                        resources (ffmpeg/model/font) are all `tauri build`
 #                        needs to compile; the venv is only for real dev-time
 #                        transcription, which CI does not exercise.
+#   BUNDLE_WHISPER_RUNTIME=1
+#                        build a self-contained Windows Whisper runtime with
+#                        PyInstaller. Used by the Windows release job.
 #   FFMPEG_PLATFORM=...   override host detection: darwin-arm64 | darwin-x64 |
 #                        linux-x64 | win32-x64.
 
@@ -31,6 +34,9 @@ FFMPEG_DIR="${REPO_ROOT}/resources/ffmpeg"
 MODELS_DIR="${REPO_ROOT}/resources/models"
 FONTS_DIR="${REPO_ROOT}/resources/fonts"
 WHISPER_DIR="${REPO_ROOT}/resources/whisper"
+WHISPER_WINDOWS_DIR="${WHISPER_DIR}/windows"
+WHISPER_WINDOWS_APP_DIR="${WHISPER_WINDOWS_DIR}/whisper"
+WHISPER_WINDOWS_EXE="${WHISPER_WINDOWS_APP_DIR}/whisper.exe"
 
 # --- Detect host platform for the ffmpeg asset ------------------------------
 # ffmpeg-static publishes one static binary per platform in a single release.
@@ -60,12 +66,8 @@ PLATFORM="$(detect_platform)"
 # ffmpeg 6.0 static binaries from eugeneware/ffmpeg-static (release b6.1.1),
 # one per platform. All four SHAs are pinned; the host's is selected below.
 #
-# The binary is always written to `resources/ffmpeg/ffmpeg` (no extension) on
-# every platform, because tauri.conf.json bundles that single path and
-# `tauri-build` fails to compile if it is missing. On Windows this file is a PE
-# executable under a non-.exe name — enough to build and package; wiring the
-# Rust backend to spawn it correctly on Windows is part of the deferred
-# win/linux resource-adaptation ticket.
+# Non-Windows builds use `resources/ffmpeg/ffmpeg`; Windows release builds use
+# `resources/ffmpeg/ffmpeg.exe` via `tauri.windows.conf.json`.
 FFMPEG_RELEASE="https://github.com/eugeneware/ffmpeg-static/releases/download/b6.1.1"
 case "${PLATFORM}" in
   darwin-arm64)
@@ -84,7 +86,11 @@ case "${PLATFORM}" in
     echo "✗ unsupported platform '${PLATFORM}'. Set FFMPEG_PLATFORM to one of: darwin-arm64, darwin-x64, linux-x64, win32-x64." >&2
     exit 1 ;;
 esac
-FFMPEG_OUT="${FFMPEG_DIR}/ffmpeg"
+if [[ "${PLATFORM}" == "win32-x64" ]]; then
+  FFMPEG_OUT="${FFMPEG_DIR}/ffmpeg.exe"
+else
+  FFMPEG_OUT="${FFMPEG_DIR}/ffmpeg"
+fi
 
 # OpenAI Whisper "base" PyTorch model (official checksum embedded in URL path).
 MODEL_URL="https://openaipublic.azureedge.net/main/whisper/models/ed3a0b6b1c0edf879ad9b11b1af5a0e6ab5db9205f891f668f8b0e6c6326e34e/base.pt"
@@ -137,34 +143,123 @@ fetch() {
   echo "✓ $(basename "${out}") downloaded and verified"
 }
 
-# --- whisper runtime (venv) -------------------------------------------------
-# The Rust backend spawns resources/whisper/whisper (a tracked launcher) which
-# forwards to a whisper CLI. Provision it in a co-located venv so dev runs
-# transcribe for real. Idempotent: an existing working CLI is left untouched.
-#
-# CI skips this: `tauri build` only needs the bundle resources above to compile,
-# and the produced artifact does not yet ship a whisper runtime anyway (that
-# packaging is deferred — see the release ticket). Provisioning ~900MB of
-# PyTorch on every CI run would be pure waste.
+python_cmd() {
+  if [[ -n "${PYTHON:-}" ]]; then
+    echo "${PYTHON}"
+    return 0
+  fi
+  if command -v python3 >/dev/null 2>&1; then
+    command -v python3
+    return 0
+  fi
+  if command -v python >/dev/null 2>&1; then
+    command -v python
+    return 0
+  fi
+  return 1
+}
+
+venv_python() {
+  local venv="$1"
+  if [[ "${PLATFORM}" == "win32-x64" ]]; then
+    echo "${venv}/Scripts/python.exe"
+  else
+    echo "${venv}/bin/python"
+  fi
+}
+
+venv_whisper() {
+  local venv="$1"
+  if [[ "${PLATFORM}" == "win32-x64" ]]; then
+    echo "${venv}/Scripts/whisper.exe"
+  else
+    echo "${venv}/bin/whisper"
+  fi
+}
+
+# --- whisper runtime ---------------------------------------------------------
+# Non-Windows dev builds spawn resources/whisper/whisper (a tracked launcher)
+# which forwards to a co-located venv. Windows release builds spawn the
+# PyInstaller executable under resources/whisper/windows/whisper/.
 provision_whisper() {
   if [[ "${SKIP_WHISPER_VENV:-0}" == "1" ]]; then
     echo "• SKIP_WHISPER_VENV=1 — skipping whisper venv provisioning"
     return 0
   fi
   local venv="${WHISPER_DIR}/venv"
-  if [[ -x "${venv}/bin/whisper" ]]; then
+  local whisper_bin
+  whisper_bin="$(venv_whisper "${venv}")"
+  if [[ -x "${whisper_bin}" ]]; then
     echo "✓ whisper venv already present"
     return 0
   fi
-  if ! command -v python3 >/dev/null 2>&1; then
+  local python
+  if ! python="$(python_cmd)"; then
     echo "✗ python3 not found — install Python 3 to provision the whisper runtime" >&2
     exit 1
   fi
+  local venv_py
+  venv_py="$(venv_python "${venv}")"
   echo "↓ creating whisper venv and installing openai-whisper (pulls PyTorch) …"
-  python3 -m venv "${venv}"
-  "${venv}/bin/python" -m pip install --quiet --upgrade pip
-  "${venv}/bin/python" -m pip install --quiet openai-whisper
+  "${python}" -m venv "${venv}"
+  "${venv_py}" -m pip install --quiet --upgrade pip
+  "${venv_py}" -m pip install --quiet openai-whisper
   echo "✓ whisper venv ready"
+}
+
+build_windows_whisper_runtime() {
+  if [[ "${BUNDLE_WHISPER_RUNTIME:-0}" != "1" ]]; then
+    return 0
+  fi
+  if [[ "${PLATFORM}" != "win32-x64" ]]; then
+    echo "✗ BUNDLE_WHISPER_RUNTIME=1 is only supported for FFMPEG_PLATFORM=win32-x64" >&2
+    exit 1
+  fi
+
+  local python
+  if ! python="$(python_cmd)"; then
+    echo "✗ python not found — install Python 3.11+ to build the Windows whisper runtime" >&2
+    exit 1
+  fi
+
+  local build_venv="${WHISPER_DIR}/build-venv"
+  local build_python
+  build_python="$(venv_python "${build_venv}")"
+  local pyinstaller_work="${REPO_ROOT}/target/pyinstaller"
+
+  echo "↓ building bundled Windows Whisper runtime with PyInstaller …"
+  rm -rf "${build_venv}" "${WHISPER_WINDOWS_DIR}" "${pyinstaller_work}"
+  "${python}" -m venv "${build_venv}"
+  "${build_python}" -m pip install --quiet --upgrade pip wheel setuptools
+  "${build_python}" -m pip install --quiet pyinstaller openai-whisper
+  mkdir -p "${WHISPER_WINDOWS_DIR}" "${pyinstaller_work}"
+
+  "${build_python}" -m PyInstaller \
+    --noconfirm \
+    --clean \
+    --onedir \
+    --name whisper \
+    --distpath "${WHISPER_WINDOWS_DIR}" \
+    --workpath "${pyinstaller_work}" \
+    --specpath "${pyinstaller_work}" \
+    --collect-all whisper \
+    --collect-all torch \
+    --collect-all tiktoken \
+    --collect-submodules tiktoken_ext \
+    --copy-metadata openai-whisper \
+    --copy-metadata tiktoken \
+    --copy-metadata torch \
+    --copy-metadata numba \
+    --copy-metadata numpy \
+    "${SCRIPT_DIR}/whisper-entry.py"
+
+  if [[ ! -f "${WHISPER_WINDOWS_EXE}" ]]; then
+    echo "✗ PyInstaller did not create ${WHISPER_WINDOWS_EXE}" >&2
+    exit 1
+  fi
+  "${WHISPER_WINDOWS_EXE}" --help >/dev/null
+  rm -rf "${build_venv}" "${pyinstaller_work}"
+  echo "✓ Windows whisper runtime ready at ${WHISPER_WINDOWS_APP_DIR}"
 }
 
 # --- Run --------------------------------------------------------------------
@@ -172,8 +267,15 @@ echo "SubtitleFlow — fetching bundled resources into resources/ (platform: ${P
 fetch "${FFMPEG_URL}" "${FFMPEG_OUT}" "${FFMPEG_SHA256}" "755"
 fetch "${MODEL_URL}"  "${MODEL_OUT}"  "${MODEL_SHA256}"  "644"
 fetch "${FONT_URL}"   "${FONT_OUT}"   "${FONT_SHA256}"   "644"
+if [[ "${PLATFORM}" == "win32-x64" ]]; then
+  mkdir -p "${WHISPER_WINDOWS_APP_DIR}"
+fi
 # The launcher shim is a bash script (dev-only, POSIX shells); chmod is a no-op
 # on Windows checkouts but harmless.
 chmod 755 "${WHISPER_DIR}/whisper" 2>/dev/null || true
-provision_whisper
+if [[ "${BUNDLE_WHISPER_RUNTIME:-0}" == "1" ]]; then
+  build_windows_whisper_runtime
+else
+  provision_whisper
+fi
 echo "Done. Resources are ready under resources/."

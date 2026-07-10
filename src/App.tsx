@@ -38,6 +38,12 @@ const COMPONENT_LABELS: Record<keyof Omit<SelfCheckReport, "ok">, string> = {
   whisper: "whisper 运行时",
 };
 
+const REQUIRED_COMPONENTS = ["ffmpeg", "model"] as const;
+const TRANSCRIPTION_UNAVAILABLE_MESSAGE =
+  "未检测到 Whisper 运行时，转写功能暂不可用。";
+const TRANSCRIPTION_UNAVAILABLE_DETAIL =
+  "如果你使用的是 Windows 安装包，这通常表示安装包资源不完整；请重新下载安装最新版本。";
+
 const SUPPORTED_EXT = ["mp4", "mkv", "mov", "avi"];
 
 function problemDetail(label: string, state: ComponentState): string {
@@ -48,6 +54,17 @@ function problemDetail(label: string, state: ComponentState): string {
       return `${label} 存在但不可执行`;
     case ComponentState.Ok:
       return `${label} 就绪`;
+  }
+}
+
+function whisperRuntimeDetail(state: ComponentState): string {
+  switch (state) {
+    case ComponentState.Missing:
+      return TRANSCRIPTION_UNAVAILABLE_DETAIL;
+    case ComponentState.NotExecutable:
+      return "Whisper 运行时存在但不可执行，转写功能暂不可用。开发环境请检查 resources/whisper/whisper 权限。";
+    case ComponentState.Ok:
+      return "Whisper 运行时就绪";
   }
 }
 
@@ -94,9 +111,22 @@ function DependencyBanner({ status }: { status: CheckStatus }) {
   }
 
   const { report } = status;
+  if (report.ok && report.whisper !== ComponentState.Ok) {
+    return (
+      <Card className="border-border bg-muted/40 px-4 py-3">
+        <p className="text-sm font-medium text-foreground">
+          {TRANSCRIPTION_UNAVAILABLE_MESSAGE}
+        </p>
+        <p className="mt-1 text-sm text-muted-foreground">
+          {whisperRuntimeDetail(report.whisper)}
+        </p>
+      </Card>
+    );
+  }
+
   if (report.ok) return null;
 
-  const problems = (["ffmpeg", "model", "whisper"] as const)
+  const problems = REQUIRED_COMPONENTS
     .filter((key) => report[key] !== ComponentState.Ok)
     .map((key) => problemDetail(COMPONENT_LABELS[key], report[key]));
 
@@ -320,7 +350,9 @@ function Workspace({
 
 function App() {
   const status = useSelfCheck();
-  const ready = status.phase === CheckPhase.Ready && status.report.ok;
+  const report = status.phase === CheckPhase.Ready ? status.report : null;
+  const appReady = report?.ok === true;
+  const transcriptionReady = appReady && report?.whisper === ComponentState.Ok;
 
   const [project, setProject] = useState<Project | null>(null);
   const [progress, setProgress] = useState<Progress | null>(null);
@@ -374,6 +406,10 @@ function App() {
   const handleImport = useCallback(
     async (path: string) => {
       setImportError(null);
+      if (!transcriptionReady) {
+        setImportError(TRANSCRIPTION_UNAVAILABLE_MESSAGE);
+        return;
+      }
       try {
         const proj = await importVideo(path, model);
         setProject({ ...proj, status: ProjectStatus.Transcribing });
@@ -385,7 +421,7 @@ function App() {
         setImportError(String(err));
       }
     },
-    [model],
+    [model, transcriptionReady],
   );
 
   const reset = useCallback(() => {
@@ -413,6 +449,11 @@ function App() {
         opened.project.status === ProjectStatus.Imported ||
         opened.project.status === ProjectStatus.Transcribing
       ) {
+        if (!transcriptionReady) {
+          setProject(null);
+          setImportError(TRANSCRIPTION_UNAVAILABLE_MESSAGE);
+          return;
+        }
         setProject({ ...opened.project, status: ProjectStatus.Transcribing });
         await startTranscription(opened.project.id);
       } else {
@@ -421,7 +462,7 @@ function App() {
     } catch (err) {
       setImportError(String(err));
     }
-  }, []);
+  }, [transcriptionReady]);
 
   return (
     <main className="mx-auto flex min-h-screen max-w-3xl flex-col gap-8 px-6 py-10">
@@ -440,7 +481,7 @@ function App() {
           progress={progress}
           srt={srt}
           translatedSrt={translatedSrt}
-          ready={ready}
+          ready={transcriptionReady}
           importError={importError}
           onImport={handleImport}
           onReset={reset}
