@@ -77,6 +77,7 @@ impl Transcriber for WhisperTranscriber {
             .arg(&out_dir)
             .env("PYTHONUTF8", "1")
             .env("PYTHONIOENCODING", "utf-8")
+            .env("PYTHONUNBUFFERED", "1")
             .env("PATH", child_path)
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
@@ -425,6 +426,63 @@ SRT
 
         assert_eq!(cues.len(), 1);
         assert_eq!(cues[0].text, "ffmpeg was available to whisper");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn transcribe_streams_python_progress_before_child_exits() {
+        use std::os::unix::fs::PermissionsExt;
+        use std::sync::mpsc;
+        use std::time::Duration;
+
+        let work = tempfile::tempdir().unwrap();
+        let audio = work.path().join("audio.wav");
+        std::fs::write(&audio, b"fake wav").unwrap();
+
+        let fake_whisper = work.path().join("fake-whisper");
+        std::fs::write(
+            &fake_whisper,
+            r#"#!/usr/bin/env python3
+import pathlib
+import sys
+import time
+
+out_dir = pathlib.Path(sys.argv[sys.argv.index("--output_dir") + 1])
+out_dir.mkdir(parents=True, exist_ok=True)
+print("[00:00.000 --> 00:01.000] buffered progress")
+time.sleep(2.0)
+(out_dir / "audio.srt").write_text(
+    "1\n00:00:00,000 --> 00:00:01,000\nstreamed progress\n\n",
+    encoding="utf-8",
+)
+"#,
+        )
+        .unwrap();
+        let mut perms = std::fs::metadata(&fake_whisper).unwrap().permissions();
+        perms.set_mode(0o755);
+        std::fs::set_permissions(&fake_whisper, perms).unwrap();
+
+        let transcriber = WhisperTranscriber::new(
+            fake_whisper,
+            work.path().into(),
+            work.path().into(),
+            work.path().join("ffmpeg"),
+        );
+        let (tx, rx) = mpsc::channel();
+        let handle = std::thread::spawn(move || {
+            transcriber.transcribe(&audio, "base", 2_000, &mut |fraction| {
+                tx.send(fraction).unwrap();
+            })
+        });
+
+        let first_progress = rx.recv_timeout(Duration::from_millis(1500));
+        let result = handle.join().unwrap();
+        assert!(result.is_ok(), "fake whisper should complete: {result:?}");
+        assert_eq!(
+            first_progress,
+            Ok(0.5),
+            "progress should be relayed while the whisper child is still running"
+        );
     }
 
     #[test]
