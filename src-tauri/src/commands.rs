@@ -205,11 +205,13 @@ pub fn start_transcription(app: AppHandle, project_id: String) -> Result<(), Str
     let dir = project_dir(&app, &project_id)?;
     let mut proj = project::load(&dir).map_err(|e| e.to_string())?;
 
-    let media = FfmpegMediaProcessor::new(ffmpeg_path(&app)?);
+    let ffmpeg = ffmpeg_path(&app)?;
+    let media = FfmpegMediaProcessor::new(ffmpeg.clone());
     let transcriber = WhisperTranscriber::new(
         whisper_path(&app)?,
         model_dir(&app)?,
         downloads_model_dir(&app)?,
+        ffmpeg,
     );
 
     std::thread::spawn(move || {

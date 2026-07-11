@@ -16,6 +16,8 @@ use std::process::{Command, Stdio};
 pub struct WhisperTranscriber {
     /// Path to the whisper executable (bundled Python entry point).
     whisper: PathBuf,
+    /// Path to the bundled ffmpeg binary used by OpenAI whisper internally.
+    ffmpeg: PathBuf,
     /// Read-only bundle dir holding the built-in `base.pt`.
     bundled_model_dir: PathBuf,
     /// Writable app-data dir holding on-demand downloaded `<model>.pt` weights.
@@ -23,9 +25,15 @@ pub struct WhisperTranscriber {
 }
 
 impl WhisperTranscriber {
-    pub fn new(whisper: PathBuf, bundled_model_dir: PathBuf, downloads_model_dir: PathBuf) -> Self {
+    pub fn new(
+        whisper: PathBuf,
+        bundled_model_dir: PathBuf,
+        downloads_model_dir: PathBuf,
+        ffmpeg: PathBuf,
+    ) -> Self {
         Self {
             whisper,
+            ffmpeg,
             bundled_model_dir,
             downloads_model_dir,
         }
@@ -57,6 +65,7 @@ impl Transcriber for WhisperTranscriber {
             .ok_or_else(|| "音频路径缺少上级目录".to_string())?;
         let out_dir = audio_dir.join("whisper-output");
         reset_output_dir(&out_dir)?;
+        let child_path = path_with_bundled_ffmpeg(&self.ffmpeg)?;
 
         let mut child = Command::new(&self.whisper)
             .arg(audio)
@@ -68,6 +77,7 @@ impl Transcriber for WhisperTranscriber {
             .arg(&out_dir)
             .env("PYTHONUTF8", "1")
             .env("PYTHONIOENCODING", "utf-8")
+            .env("PATH", child_path)
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .spawn()
@@ -126,6 +136,17 @@ fn reset_output_dir(out_dir: &Path) -> Result<(), String> {
         std::fs::remove_file(out_dir).map_err(|e| format!("清理 whisper 输出文件失败：{e}"))?;
     }
     std::fs::create_dir_all(out_dir).map_err(|e| format!("创建 whisper 输出目录失败：{e}"))
+}
+
+fn path_with_bundled_ffmpeg(ffmpeg: &Path) -> Result<std::ffi::OsString, String> {
+    let ffmpeg_dir = ffmpeg
+        .parent()
+        .ok_or_else(|| "ffmpeg 路径缺少上级目录".to_string())?;
+    let mut paths = vec![ffmpeg_dir.to_path_buf()];
+    if let Some(existing) = std::env::var_os("PATH") {
+        paths.extend(std::env::split_paths(&existing));
+    }
+    std::env::join_paths(paths).map_err(|e| format!("构造 whisper PATH 失败：{e}"))
 }
 
 fn whisper_output_srt_path(audio: &Path, out_dir: &Path) -> Result<PathBuf, String> {
@@ -269,6 +290,7 @@ mod tests {
             repo.join("resources/whisper/whisper"),
             repo.join("resources/models"),
             repo.join("resources/models"),
+            repo.join("resources/ffmpeg/ffmpeg"),
         );
         let mut fractions = Vec::new();
         let cues = transcriber
@@ -321,14 +343,88 @@ SRT
         perms.set_mode(0o755);
         std::fs::set_permissions(&fake_whisper, perms).unwrap();
 
-        let transcriber =
-            WhisperTranscriber::new(fake_whisper, work.path().into(), work.path().into());
+        let transcriber = WhisperTranscriber::new(
+            fake_whisper,
+            work.path().into(),
+            work.path().into(),
+            work.path().join("ffmpeg"),
+        );
         let cues = transcriber
             .transcribe(&audio, "base", 1_000, &mut |_| {})
             .expect("should read the SRT actually produced by the runtime");
 
         assert_eq!(cues.len(), 1);
         assert_eq!(cues[0].text, "hello from fake whisper");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn transcribe_prepends_bundled_ffmpeg_dir_to_child_path() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let work = tempfile::tempdir().unwrap();
+        let audio = work.path().join("audio.wav");
+        std::fs::write(&audio, b"fake wav").unwrap();
+
+        let ffmpeg_dir = work.path().join("ffmpeg-bin");
+        std::fs::create_dir_all(&ffmpeg_dir).unwrap();
+        let fake_ffmpeg = ffmpeg_dir.join("ffmpeg");
+        std::fs::write(&fake_ffmpeg, "#!/bin/sh\nexit 0\n").unwrap();
+        let mut ffmpeg_perms = std::fs::metadata(&fake_ffmpeg).unwrap().permissions();
+        ffmpeg_perms.set_mode(0o755);
+        std::fs::set_permissions(&fake_ffmpeg, ffmpeg_perms).unwrap();
+
+        let fake_whisper = work.path().join("fake-whisper");
+        std::fs::write(
+            &fake_whisper,
+            r#"#!/bin/sh
+set -eu
+
+script_dir=$(dirname "$0")
+ffmpeg_dir="$script_dir/ffmpeg-bin"
+first_path=${PATH%%:*}
+if [ "$first_path" != "$ffmpeg_dir" ]; then
+  printf '%s\n' "Traceback (most recent call last):" \
+    "FileNotFoundError: [Errno 2] No such file or directory: 'ffmpeg'" >&2
+  exit 0
+fi
+ffmpeg --self-test >/dev/null
+
+out_dir=""
+while [ "$#" -gt 0 ]; do
+  if [ "$1" = "--output_dir" ]; then
+    shift
+    out_dir="$1"
+    break
+  fi
+  shift
+done
+mkdir -p "$out_dir"
+cat > "$out_dir/audio.srt" <<'SRT'
+1
+00:00:00,000 --> 00:00:01,000
+ffmpeg was available to whisper
+
+SRT
+"#,
+        )
+        .unwrap();
+        let mut whisper_perms = std::fs::metadata(&fake_whisper).unwrap().permissions();
+        whisper_perms.set_mode(0o755);
+        std::fs::set_permissions(&fake_whisper, whisper_perms).unwrap();
+
+        let transcriber = WhisperTranscriber::new(
+            fake_whisper,
+            work.path().into(),
+            work.path().into(),
+            fake_ffmpeg,
+        );
+        let cues = transcriber
+            .transcribe(&audio, "base", 1_000, &mut |_| {})
+            .expect("bundled ffmpeg directory should be visible to whisper");
+
+        assert_eq!(cues.len(), 1);
+        assert_eq!(cues[0].text, "ffmpeg was available to whisper");
     }
 
     #[test]
