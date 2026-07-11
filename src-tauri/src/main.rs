@@ -2,5 +2,5 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 fn main() {
-    subtitleflow_lib::run()
+    sub_pilot_lib::run()
 }

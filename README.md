@@ -1,10 +1,10 @@
-# SubtitleFlow
+# sub-pilot
 
 一款完全本地运行、免费的 AI 视频字幕工具（Tauri v2 桌面版，macOS 首发）。
 
 导入视频 → 本地 Whisper 转写出原始字幕 → 生成翻译 Prompt 供外部 AI 翻译 → 导回译文并校验 → 导出外挂字幕或烧录进画面。全程离线、不登录、不上传。
 
-产品愿景见 `SubtitleFlow_PRD.md`；术语见 `CONTEXT.md`；架构决策见 `docs/adr/`。
+术语见 `CONTEXT.md`；架构决策见 `docs/adr/`。
 
 ## 下载与安装
 
@@ -12,7 +12,7 @@
 
 > **当前为未签名构建**，首次启动会被系统安全机制拦截，需手动放行：
 >
-> - **macOS**：提示「已损坏」或「无法验证开发者」时，在「系统设置 → 隐私与安全性」点「仍要打开」，或终端执行 `xattr -dr com.apple.quarantine /Applications/SubtitleFlow.app`。
+> - **macOS**：提示「已损坏」或「无法验证开发者」时，在「系统设置 → 隐私与安全性」点「仍要打开」，或终端执行 `xattr -dr com.apple.quarantine /Applications/sub-pilot.app`。
 > - **Windows**：SmartScreen 弹「Windows 已保护你的电脑」时，点「更多信息 → 仍要运行」。
 >
 > 代码签名与公证正在跟进（见 `.scratch/release-cicd/issues/03-code-signing-and-notarization.md`）。
@@ -60,8 +60,8 @@ cargo test          # 后端单测（在 src-tauri/ 下运行）
 
 ```bash
 # 确认 main 已绿（CI 通过），版本号与 package.json / tauri.conf.json / Cargo.toml 一致
-git tag v0.1.0
-git push origin v0.1.0
+git tag v0.1.7
+git push origin v0.1.7
 ```
 
 workflow 跑完后，到 GitHub Releases 页面检查产物与发布说明，确认无误再手动 **Publish** 草稿。

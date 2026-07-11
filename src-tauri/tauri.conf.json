@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "SubtitleFlow",
-  "version": "0.1.6",
-  "identifier": "com.subtitleflow.app",
+  "productName": "sub-pilot",
+  "version": "0.1.7",
+  "identifier": "com.sub-pilot.app",
   "build": {
     "beforeDevCommand": "npm run dev:web",
     "devUrl": "http://localhost:1420",
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "SubtitleFlow",
+        "title": "sub-pilot",
         "width": 1000,
         "height": 720
       }

@@ -1,6 +1,6 @@
-# SubtitleFlow
+# sub-pilot
 
-一款完全本地运行、免费的 AI 视频字幕工具（Tauri 桌面版）。产品需求见 `SubtitleFlow_PRD.md`。
+一款完全本地运行、免费的 AI 视频字幕工具（Tauri 桌面版）。术语见 `CONTEXT.md`，架构决策见 `docs/adr/`。
 
 ## Agent skills
 

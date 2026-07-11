@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Downloads the bundled external dependencies SubtitleFlow needs to run:
+# Downloads the bundled external dependencies sub-pilot needs to run:
 #   - ffmpeg  : static binary for the host platform -> resources/ffmpeg/ffmpeg[.exe]
 #   - base model : OpenAI Whisper "base" PyTorch model -> resources/models/base.pt
 #   - CJK font : Noto Sans CJK SC for burn-in         -> resources/fonts/NotoSansCJKsc-Regular.otf
@@ -263,7 +263,7 @@ build_windows_whisper_runtime() {
 }
 
 # --- Run --------------------------------------------------------------------
-echo "SubtitleFlow — fetching bundled resources into resources/ (platform: ${PLATFORM})"
+echo "sub-pilot — fetching bundled resources into resources/ (platform: ${PLATFORM})"
 fetch "${FFMPEG_URL}" "${FFMPEG_OUT}" "${FFMPEG_SHA256}" "755"
 if [[ "${PLATFORM}" == "win32-x64" ]]; then
   python="$(python_cmd)"

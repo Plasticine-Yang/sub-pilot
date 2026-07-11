@@ -467,7 +467,7 @@ function App() {
   return (
     <main className="mx-auto flex min-h-screen max-w-3xl flex-col gap-8 px-6 py-10">
       <header className="space-y-1">
-        <h1 className="text-2xl font-semibold tracking-tight">SubtitleFlow</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">sub-pilot</h1>
         <p className="text-sm text-muted-foreground">
           完全本地运行的 AI 视频字幕工具
         </p>

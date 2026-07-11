@@ -99,7 +99,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tagName: ${{ github.ref_name }}
-          releaseName: "SubtitleFlow ${{ github.ref_name }}"
+          releaseName: "sub-pilot ${{ github.ref_name }}"
           releaseBody: |
             未签名构建：macOS 会被 Gatekeeper 拦、Windows 有 SmartScreen 警告，绕过方法见 README「下载与安装」。
             Windows 安装包已内置 Whisper 运行时，安装后可直接本地转写；macOS/Linux 的 Whisper 随包运行时仍在后续跟进。

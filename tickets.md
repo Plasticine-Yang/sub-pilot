@@ -1,6 +1,6 @@
-# Tickets: SubtitleFlow MVP (macOS)
+# Tickets: sub-pilot MVP (macOS)
 
-把 `.scratch/subtitleflow-mvp/PRD.md` 的 MVP 拆成曳光弹垂直切片。术语见 `CONTEXT.md`，架构决策见 `docs/adr/0001`–`0005`（转写引擎以 `0005` 为准，`0001` 已 superseded）。
+把 `.scratch/sub-pilot-mvp/PRD.md` 的 MVP 拆成曳光弹垂直切片。术语见 `CONTEXT.md`，架构决策见 `docs/adr/0001`–`0005`（转写引擎以 `0005` 为准，`0001` 已 superseded）。
 
 Work the **frontier**: 任何「Blocked by」已全部完成的票都可开工。依赖图：0 → 1 → {2, 3, 4, 7 并行}；4 → 5 → 6。每张票用 `/implement` 单独构建，票与票之间清空上下文。
 

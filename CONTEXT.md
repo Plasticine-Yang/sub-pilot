@@ -1,4 +1,4 @@
-# SubtitleFlow
+# sub-pilot
 
 一款完全本地运行、免费的 AI 视频字幕工具（Tauri 桌面版）。用户导入视频，本地 Whisper 转写生成原始字幕，借助任意外部 AI 完成翻译后导回，校验并烧录/导出。
 

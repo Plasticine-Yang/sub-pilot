@@ -1,8 +1,8 @@
 [package]
-name = "subtitleflow"
-version = "0.1.6"
-description = "SubtitleFlow — 完全本地运行的 AI 视频字幕工具"
-authors = ["SubtitleFlow"]
+name = "sub-pilot"
+version = "0.1.7"
+description = "sub-pilot — 完全本地运行的 AI 视频字幕工具"
+authors = ["sub-pilot"]
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -11,7 +11,7 @@ edition = "2021"
 # The `_lib` suffix may seem redundant but it is necessary
 # to make the lib name unique and wouldn't conflict with the bin name.
 # This seems to be only an issue on Windows, see https://github.com/rust-lang/cargo/issues/8519
-name = "subtitleflow_lib"
+name = "sub_pilot_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]

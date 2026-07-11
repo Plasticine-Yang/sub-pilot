@@ -1,8 +1,8 @@
-# PRD / Spec: SubtitleFlow MVP (macOS)
+# PRD / Spec: sub-pilot MVP (macOS)
 
 Status: ready-for-agent
 
-> 本 spec 由 grill-with-docs 对话综合而来。产品愿景见仓库根 `SubtitleFlow_PRD.md`；术语见 `CONTEXT.md`；架构决策见 `docs/adr/0001`–`0004`。本 spec 只覆盖 macOS 首发的 MVP。
+> 本 spec 由 grill-with-docs 对话综合而来。术语见 `CONTEXT.md`；架构决策见 `docs/adr/0001`–`0004`。本 spec 只覆盖 macOS 首发的 MVP。
 
 ## Problem Statement
 
