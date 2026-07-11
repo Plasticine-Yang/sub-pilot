@@ -4,8 +4,7 @@ name: Release
 # pushed. Create the tag from a green `main`, e.g.:
 #   git tag v0.1.0 && git push origin v0.1.0
 #
-# The release is created as a DRAFT: review the artifacts and notes, then
-# publish it manually from the GitHub Releases page.
+# The release is published immediately when the version tag is pushed.
 #
 # NOTE: bundles are currently UNSIGNED. macOS Gatekeeper and Windows SmartScreen
 # will warn on first launch; see README "下载与安装" for the workaround. Signing +
@@ -93,7 +92,7 @@ jobs:
           FFMPEG_PLATFORM: ${{ matrix.ffmpeg_platform }}
         run: ./scripts/setup-resources.sh
 
-      - name: Build and publish (draft release)
+      - name: Build and publish release
         uses: tauri-apps/tauri-action@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -103,6 +102,6 @@ jobs:
           releaseBody: |
             未签名构建：macOS 会被 Gatekeeper 拦、Windows 有 SmartScreen 警告，绕过方法见 README「下载与安装」。
             Windows 安装包已内置 Whisper 运行时，安装后可直接本地转写；macOS/Linux 的 Whisper 随包运行时仍在后续跟进。
-          releaseDraft: true
+          releaseDraft: false
           prerelease: false
           args: ${{ matrix.args }}

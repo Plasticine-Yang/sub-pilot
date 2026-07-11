@@ -1,6 +1,6 @@
 [package]
 name = "sub-pilot"
-version = "0.1.7"
+version = "0.1.8"
 description = "sub-pilot — 完全本地运行的 AI 视频字幕工具"
 authors = ["sub-pilot"]
 edition = "2021"
