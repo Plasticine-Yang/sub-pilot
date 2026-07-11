@@ -1,0 +1,27 @@
+src-tauri/tauri.conf.json
+  s_a998e6cf81037c::t_2aafd8ba987236 4
+src-tauri/Cargo.toml
+  s_a998e6cf81037c::t_a9a26951cc9844 3
+.github/workflows/release.yml
+  s_a998e6cf81037c::t_9dfe79e36d07d6 7,95,105
+package.json
+  s_a998e6cf81037c::t_54e0ad28ca2acf 4
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "10e2a6e0a67c0853d446732e5ddc86ae17cbbf4d",
+  "prompts": {},
+  "sessions": {
+    "s_a998e6cf81037c": {
+      "agent_id": {
+        "tool": "trae",
+        "id": "6a51963763a01e2af9103110",
+        "model": "gpt-5.5__max"
+      },
+      "human_author": "yangwenfeng.0719 <yangwenfeng.0719@bytedance.com>"
+    }
+  },
+  "attestation_metadata": {},
+  "remote_transcripts": {}
+}
