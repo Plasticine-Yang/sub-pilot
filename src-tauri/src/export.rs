@@ -15,8 +15,10 @@ use std::path::{Path, PathBuf};
 pub enum ExportError {
     /// The project isn't in a state that can be exported (needs `validated`).
     NotValidated,
-    /// The ffmpeg mux failed.
+    /// The ffmpeg soft-subtitle mux failed.
     Mux(String),
+    /// The ffmpeg burn-in export failed.
+    BurnIn(String),
     Io(std::io::Error),
 }
 
@@ -27,6 +29,7 @@ impl std::fmt::Display for ExportError {
                 write!(f, "请先导入并校验译文字幕后再导出")
             }
             ExportError::Mux(m) => write!(f, "封装软字幕失败：{m}"),
+            ExportError::BurnIn(m) => write!(f, "烧录字幕失败：{m}"),
             ExportError::Io(e) => write!(f, "导出文件失败：{e}"),
         }
     }
@@ -91,7 +94,7 @@ pub fn export_burn_in(
             project.duration_ms,
             on_progress,
         )
-        .map_err(ExportError::Mux)?;
+        .map_err(ExportError::BurnIn)?;
     project.status = ProjectStatus::Exported;
     project::save(project_dir, project).map_err(ExportError::Io)?;
     Ok(out_path)
@@ -276,8 +279,7 @@ mod tests {
         let media = FakeMedia::failing();
         let mut project = validated_project();
 
-        let err =
-            export_soft_subtitle(&media, dir.path(), &mut project, out.path()).unwrap_err();
+        let err = export_soft_subtitle(&media, dir.path(), &mut project, out.path()).unwrap_err();
 
         assert!(matches!(err, ExportError::Mux(_)));
         assert_eq!(project.status, ProjectStatus::Validated);
@@ -319,10 +321,10 @@ mod tests {
         let media = FakeMedia::failing();
         let mut project = validated_project();
 
-        let err = export_burn_in(&media, dir.path(), &mut project, out.path(), &mut |_| {})
-            .unwrap_err();
+        let err =
+            export_burn_in(&media, dir.path(), &mut project, out.path(), &mut |_| {}).unwrap_err();
 
-        assert!(matches!(err, ExportError::Mux(_)));
+        assert!(matches!(err, ExportError::BurnIn(_)));
         assert_eq!(project.status, ProjectStatus::Validated);
     }
 
@@ -334,8 +336,8 @@ mod tests {
         let mut project = validated_project();
         project.status = ProjectStatus::Transcribed;
 
-        let err = export_burn_in(&media, dir.path(), &mut project, out.path(), &mut |_| {})
-            .unwrap_err();
+        let err =
+            export_burn_in(&media, dir.path(), &mut project, out.path(), &mut |_| {}).unwrap_err();
         assert!(matches!(err, ExportError::NotValidated));
     }
 }

@@ -5,7 +5,7 @@
 //! extract/probe path is verified manually with a short fixture.
 
 use crate::transcribe::MediaProcessor;
-use std::io::{BufRead, BufReader};
+use std::io::{BufRead, BufReader, Read};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
@@ -63,12 +63,7 @@ impl MediaProcessor for FfmpegMediaProcessor {
         }
     }
 
-    fn mux_subtitle(
-        &self,
-        video: &Path,
-        subtitle: &Path,
-        out_video: &Path,
-    ) -> Result<(), String> {
+    fn mux_subtitle(&self, video: &Path, subtitle: &Path, out_video: &Path) -> Result<(), String> {
         // Copy A/V streams untouched and add the SRT as a switchable soft
         // subtitle track. The subtitle codec depends on the output container
         // (MP4/MOV want `mov_text`; Matroska wants `srt`), so a bad pairing
@@ -105,11 +100,7 @@ impl MediaProcessor for FfmpegMediaProcessor {
     ) -> Result<(), String> {
         // Render the SRT into the picture with the `subtitles` filter. A bundled
         // fonts dir + a forced CJK-capable family keeps 中文/日文 from tofu.
-        let mut filter = format!("subtitles={}", escape_filter_path(subtitle));
-        if let Some(dir) = &self.fonts_dir {
-            filter.push_str(&format!(":fontsdir={}", escape_filter_path(dir)));
-        }
-        filter.push_str(":force_style='FontName=Noto Sans CJK SC'");
+        let filter = subtitles_filter(subtitle, self.fonts_dir.as_deref());
 
         // `-progress pipe:1` prints machine-readable `out_time_ms=…` lines to
         // stdout; we translate those into a completion fraction.
@@ -121,9 +112,17 @@ impl MediaProcessor for FfmpegMediaProcessor {
             .args(["-progress", "pipe:1", "-nostats"])
             .arg(out_video)
             .stdout(Stdio::piped())
-            .stderr(Stdio::null())
+            .stderr(Stdio::piped())
             .spawn()
             .map_err(|e| format!("无法启动 ffmpeg：{e}"))?;
+
+        let stderr = child.stderr.take().map(|stderr| {
+            std::thread::spawn(move || {
+                let mut text = String::new();
+                let _ = BufReader::new(stderr).read_to_string(&mut text);
+                text
+            })
+        });
 
         if let Some(stdout) = child.stdout.take() {
             let reader = BufReader::new(stdout);
@@ -137,11 +136,18 @@ impl MediaProcessor for FfmpegMediaProcessor {
         let status = child
             .wait()
             .map_err(|e| format!("等待 ffmpeg 进程失败：{e}"))?;
+        let stderr = stderr
+            .map(|handle| handle.join().unwrap_or_default())
+            .unwrap_or_default();
         if status.success() {
             on_progress(1.0);
             Ok(())
         } else {
-            Err(format!("ffmpeg 烧录字幕失败（退出码 {:?}）", status.code()))
+            Err(format_ffmpeg_failure(
+                "ffmpeg 烧录字幕失败",
+                status.code(),
+                &stderr,
+            ))
         }
     }
 }
@@ -161,11 +167,26 @@ fn soft_subtitle_codec(out_video: &Path) -> &'static str {
     }
 }
 
-/// Escapes a path for use inside an ffmpeg filtergraph argument, where `\`,
-/// `:`, and `'` are special. Windows drive colons and spaces are the usual
-/// offenders; on macOS this mostly guards `:` and `'` in file names.
+/// Builds the `subtitles` filter with explicit option names. Quoting each path
+/// value is necessary for Windows install paths such as `C:\Program Files`.
+fn subtitles_filter(subtitle: &Path, fonts_dir: Option<&Path>) -> String {
+    let mut filter = format!("subtitles=filename={}", quote_filter_value(subtitle));
+    if let Some(dir) = fonts_dir {
+        filter.push_str(&format!(":fontsdir={}", quote_filter_value(dir)));
+    }
+    filter.push_str(":force_style='FontName=Noto Sans CJK SC'");
+    filter
+}
+
+fn quote_filter_value(path: &Path) -> String {
+    format!("'{}'", escape_filter_path(path))
+}
+
+/// Escapes a path for use inside an ffmpeg filtergraph quoted value, where `:`
+/// and `'` are special. Windows paths are normalized to forward slashes first
+/// so `\` is not interpreted as a filtergraph escape.
 fn escape_filter_path(path: &Path) -> String {
-    let s = path.to_string_lossy();
+    let s = filter_path_string(path);
     let mut out = String::with_capacity(s.len() + 2);
     for ch in s.chars() {
         match ch {
@@ -176,6 +197,45 @@ fn escape_filter_path(path: &Path) -> String {
         }
     }
     out
+}
+
+fn filter_path_string(path: &Path) -> String {
+    let s = path.to_string_lossy();
+    if is_windows_path_text(&s) {
+        s.replace('\\', "/")
+    } else {
+        s.into_owned()
+    }
+}
+
+fn is_windows_path_text(path: &str) -> bool {
+    let bytes = path.as_bytes();
+    (bytes.len() >= 3 && bytes[0].is_ascii_alphabetic() && bytes[1] == b':')
+        || path.starts_with("\\\\")
+}
+
+fn format_ffmpeg_failure(context: &str, code: Option<i32>, stderr: &str) -> String {
+    let mut message = format!("{context}（退出码 {code:?}）");
+    if let Some(summary) = stderr_summary(stderr) {
+        message.push('：');
+        message.push_str(&summary);
+    }
+    message
+}
+
+fn stderr_summary(stderr: &str) -> Option<String> {
+    let mut lines = stderr
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .rev()
+        .take(4)
+        .collect::<Vec<_>>();
+    if lines.is_empty() {
+        return None;
+    }
+    lines.reverse();
+    Some(lines.join("\n"))
 }
 
 /// Turns an ffmpeg `-progress` line into a completion fraction. Recognizes
@@ -262,17 +322,26 @@ mod tests {
     #[test]
     fn parses_progress_from_out_time_ms() {
         // ffmpeg's `out_time_ms` is actually microseconds: 15_000_000µs = 15s.
-        assert_eq!(parse_progress_fraction("out_time_ms=15000000", 30_000), Some(0.5));
+        assert_eq!(
+            parse_progress_fraction("out_time_ms=15000000", 30_000),
+            Some(0.5)
+        );
     }
 
     #[test]
     fn parses_progress_from_out_time_us() {
-        assert_eq!(parse_progress_fraction("out_time_us=7500000", 30_000), Some(0.25));
+        assert_eq!(
+            parse_progress_fraction("out_time_us=7500000", 30_000),
+            Some(0.25)
+        );
     }
 
     #[test]
     fn progress_clamps_past_end_and_ignores_other_lines() {
-        assert_eq!(parse_progress_fraction("out_time_ms=40000000", 30_000), Some(1.0));
+        assert_eq!(
+            parse_progress_fraction("out_time_ms=40000000", 30_000),
+            Some(1.0)
+        );
         assert_eq!(parse_progress_fraction("frame=123", 30_000), None);
         assert_eq!(parse_progress_fraction("progress=continue", 30_000), None);
     }
@@ -291,6 +360,19 @@ mod tests {
         assert_eq!(
             escape_filter_path(Path::new("/plain/path.srt")),
             "/plain/path.srt"
+        );
+    }
+
+    #[test]
+    fn subtitles_filter_quotes_windows_paths_with_spaces() {
+        let filter = subtitles_filter(
+            Path::new("C:\\Users\\Alice\\sub-pilot\\translated.srt"),
+            Some(Path::new("C:\\Program Files\\sub-pilot\\resources\\fonts")),
+        );
+
+        assert_eq!(
+            filter,
+            "subtitles=filename='C\\:/Users/Alice/sub-pilot/translated.srt':fontsdir='C\\:/Program Files/sub-pilot/resources/fonts':force_style='FontName=Noto Sans CJK SC'"
         );
     }
 
